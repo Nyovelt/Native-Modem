@@ -4,6 +4,13 @@
     <OutputType>Exe</OutputType>
     <TargetFramework>net5.0</TargetFramework>
     <RootNamespace>Native_Modem</RootNamespace>
+    <ApplicationIcon />
+    <StartupObject />
   </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="NAudio.Asio" Version="2.0.0" />
+    <PackageReference Include="NAudio.Core" Version="2.0.0" />
+  </ItemGroup>
 
 </Project>
