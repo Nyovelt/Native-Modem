@@ -6,13 +6,17 @@ using System.Runtime.InteropServices;
 
 namespace Native_Modem
 {
-    class Program
+    class Program 
     {
+
         [STAThread]
         static void Main(string[] args)
         {
-            var Recorder = new Recorder();
-            Recorder.setupRecordArgs();
+            var recorder = new Recorder(0);
+            recorder.setupRecordArgs(0, 1, 48000);
+            recorder.startRecord();
+            Console.ReadLine();
+            recorder.stopRecord();
         }
     }
 }
