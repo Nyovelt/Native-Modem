@@ -1,4 +1,5 @@
 ﻿using Microsoft.Win32;
+using NAudio;
 using NAudio.Wave;
 using NAudio.Wave.Asio;
 using System;
@@ -11,12 +12,13 @@ namespace Native_Modem
         private AsioOut asioOut;
         private string[] asioDriverName;
         private  WaveFileWriter writer;
+        
         public Recorder(int DriverNameIndex =0 )
         {
             asioOut = new AsioOut(listAsioDricerNames(DriverNameIndex));
             Console.WriteLine("Choosing the Sound Card: {0}", asioDriverName[DriverNameIndex]);
-            var samplesOutWav = @"..\..\..\testOutput";
-            writer = new WaveFileWriter(samplesOutWav, new WaveFormat(16000, 24, 1));
+            string fileName = @"../../../a.wav";
+            writer = new WaveFileWriter(fileName, WaveFormat.CreateIeeeFloatWaveFormat(48000, 1));
         }
 
         ~Recorder()
@@ -50,7 +52,9 @@ namespace Native_Modem
             //{
             //    Console.Write("{0} ", i);
             //}
+
             writer.WriteSamples(samples, 0, samples.Length);
+             
         }
 
         public void startRecord()
