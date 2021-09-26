@@ -12,48 +12,66 @@ namespace Native_Modem
         private AsioOut asioOut;
         private string[] asioDriverName;
         private  WaveFileWriter writer;
+
+        private bool disposed = false;
+        private readonly float[] buffer = new float[1024];
         
-        public Recorder(int DriverNameIndex =0 )
+        public Recorder()
         {
-            asioOut = new AsioOut(listAsioDricerNames(DriverNameIndex));
-            Console.WriteLine("Choosing the Sound Card: {0}", asioDriverName[DriverNameIndex]);
+            asioOut = new AsioOut(listAsioDriverNames());
             string fileName = @"../../../a.wav";
             writer = new WaveFileWriter(fileName, WaveFormat.CreateIeeeFloatWaveFormat(48000, 1));
+            asioOut.ShowControlPanel();
+            Console.WriteLine("Please configure the sound card, press enter to continue.");
+            Console.ReadLine();
         }
 
         ~Recorder()
         {
-            asioOut.Dispose();
-        }
-
-
-        public void setupRecordArgs(int inputChannelIndex = 0, int recordChannelCount = 1, int sampleRate = 48000 )
-        {
-            var inputChannels = asioOut.DriverInputChannelCount;
-            asioOut.InputChannelOffset = inputChannelIndex;
-            Console.WriteLine("We have {0} input recording Channels, and we are choosing the  Channel {1}, recordChannelCount {2}, sampleRate {3}", inputChannels, inputChannelIndex, recordChannelCount, sampleRate);
-            asioOut.InitRecordAndPlayback(null, recordChannelCount, sampleRate);
-        }
-
-        private string listAsioDricerNames(int DriverNameIndex = 0)
-        {
-            asioDriverName = AsioOut.GetDriverNames();
-            foreach(var name in asioDriverName)
+            if (!disposed)
             {
-                Console.WriteLine(name);
+                writer.Dispose();
+                asioOut.Dispose();
             }
-            return asioDriverName[DriverNameIndex];
+        }
+
+
+        public void setupRecordArgs(int recordChannelCount = 1, int sampleRate = 48000 )
+        {
+            Console.WriteLine($"recordChannelCount {recordChannelCount}, sampleRate {sampleRate}");
+            Console.WriteLine("Select input channel:");
+            var inputChannels = asioOut.DriverInputChannelCount;
+            for (int i = 0; i < inputChannels; i++)
+            {
+                Console.WriteLine($"Input channel {i}: {asioOut.AsioInputChannelName(i)}");
+            }
+            int channel = int.Parse(Console.ReadLine());
+            asioOut.InputChannelOffset = channel;
+            Console.WriteLine($"Choosing the input channel: {asioOut.AsioInputChannelName(channel)}");
+
+            asioOut.InitRecordAndPlayback(null, recordChannelCount, sampleRate);
+            Console.WriteLine("Press enter to start recording");
+            Console.ReadLine();
+        }
+
+        private string listAsioDriverNames()
+        {
+            Console.WriteLine("Select a audio driver:");
+            asioDriverName = AsioOut.GetDriverNames();
+            for (int i = 0; i < asioDriverName.Length; i++)
+            {
+                Console.WriteLine($"{i}: {asioDriverName[i]}");
+            }
+            string selected =  asioDriverName[int.Parse(Console.ReadLine())];
+            Console.WriteLine($"Choosing the audio driver: {selected}");
+            return selected;
         }
 
         void OnAsioOutAudioAvailable(object sender, AsioAudioAvailableEventArgs e)
         {
-            var samples = e.GetAsInterleavedSamples();
-            //foreach (var i in samples)
-            //{
-            //    Console.Write("{0} ", i);
-            //}
+            int sampleCount = e.GetAsInterleavedSamples(buffer);
 
-            writer.WriteSamples(samples, 0, samples.Length);
+            writer.WriteSamples(buffer, 0, sampleCount);
              
         }
 
@@ -61,11 +79,17 @@ namespace Native_Modem
         {
             asioOut.AudioAvailable += OnAsioOutAudioAvailable;
             asioOut.Play(); // start recording
+            Console.WriteLine("Recording...Press enter to stop");
         }
 
         public void stopRecord()
         {
             asioOut.Stop();
+            asioOut.AudioAvailable -= OnAsioOutAudioAvailable;
+            writer.Dispose();
+            asioOut.Dispose();
+            disposed = true;
+            Console.WriteLine("Record end. Saved to a.wav");
         }
 
     }

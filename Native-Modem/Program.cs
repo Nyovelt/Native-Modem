@@ -12,8 +12,8 @@ namespace Native_Modem
         [STAThread]
         static void Main(string[] args)
         {
-            var recorder = new Recorder(0);
-            recorder.setupRecordArgs(0, 1, 48000);
+            var recorder = new Recorder();
+            recorder.setupRecordArgs(1, 48000);
             recorder.startRecord();
             Console.ReadLine();
             recorder.stopRecord();
