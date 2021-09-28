@@ -12,11 +12,16 @@ namespace Native_Modem
         [STAThread]
         static void Main(string[] args)
         {
-            var recorder = new Recorder();
-            recorder.setupRecordArgs(1, 48000);
-            recorder.startRecord();
+            //var recorder = new Recorder();
+            //recorder.setupRecordArgs(1, 48000);
+            //recorder.startRecord();
+            //Console.ReadLine();
+            //recorder.stopRecord();
+            var speaker = new Speaker();
+            speaker.setupSpeakArgs();
+            speaker.startPlayWAV(@"../../../b.wav");
             Console.ReadLine();
-            recorder.stopRecord();
+            speaker.stopPlayWAV();
         }
     }
 }

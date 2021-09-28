@@ -1,9 +1,5 @@
-﻿using Microsoft.Win32;
-using NAudio;
-using NAudio.Wave;
-using NAudio.Wave.Asio;
+﻿using NAudio.Wave;
 using System;
-using System.Runtime.InteropServices;
 
 namespace Native_Modem
 {
@@ -18,6 +14,7 @@ namespace Native_Modem
         
         public Recorder()
         {
+            Console.WriteLine("Configuring the Recorder");
             asioOut = new AsioOut(listAsioDriverNames());
             string fileName = @"../../../a.wav";
             writer = new WaveFileWriter(fileName, WaveFormat.CreateIeeeFloatWaveFormat(48000, 1));
