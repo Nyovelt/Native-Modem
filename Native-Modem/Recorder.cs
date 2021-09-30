@@ -36,7 +36,7 @@ namespace Native_Modem
             state = RecorderState.Disposed;
         }
 
-        public void SetupArgs(int recordChannelCount, int recordSampleRate)
+        public void SetupArgs(int recordSampleRate, int recordBitDepth, int recordChannelCount)
         {
             if (state == RecorderState.Disposed)
             {
@@ -61,9 +61,9 @@ namespace Native_Modem
             }
             int outChannel = int.Parse(Console.ReadLine());
             AsioOut.ChannelOffset = outChannel; // Todo: Different from the sample
-            Console.WriteLine($"Choosing the input channel: {AsioOut.AsioOutputChannelName(outChannel)}");
+            Console.WriteLine($"Choosing the output channel: {AsioOut.AsioOutputChannelName(outChannel)}");
 
-            wavFormat = new WaveFormat(recordSampleRate, recordChannelCount);
+            wavFormat = new WaveFormat(recordSampleRate, recordBitDepth, recordChannelCount);
             state = RecorderState.Idling;
         }
 
@@ -73,18 +73,36 @@ namespace Native_Modem
             writer.WriteSamples(buffer, 0, sampleCount);
         }
 
-        public bool StartRecordAndPlayback(string recordPath, string playbackPath)
+        public bool StartRecordAndPlayback(string recordPath = null, string playbackPath = null)
         {
             if (state != RecorderState.Idling)
             {
                 return false;
             }
 
-            AudioFileReader reader = new AudioFileReader(playbackPath);
+            bool record = !string.IsNullOrEmpty(recordPath);
+            bool playback = !string.IsNullOrEmpty(playbackPath);
+            if (!record && !playback)
+            {
+                return false;
+            }
 
-            writer = new WaveFileWriter(recordPath, wavFormat);
+            AudioFileReader reader = null;
+            if (record)
+            {
+                writer = new WaveFileWriter(recordPath, wavFormat);
+                if (playback)
+                {
+                    reader = new AudioFileReader(playbackPath);
+                }
+                AsioOut.InitRecordAndPlayback(reader, wavFormat.Channels, wavFormat.SampleRate);
+            }
+            else
+            {
+                reader = new AudioFileReader(playbackPath);
+                AsioOut.Init(reader);
+            }
 
-            AsioOut.InitRecordAndPlayback(reader, wavFormat.Channels, wavFormat.SampleRate);
             AsioOut.AudioAvailable += OnAsioOutAudioAvailable;
             AsioOut.Play();
             state = RecorderState.Recording;
@@ -100,9 +118,14 @@ namespace Native_Modem
 
             AsioOut.Stop();
             AsioOut.AudioAvailable -= OnAsioOutAudioAvailable;
-            writer.Close();
-            writer.Dispose();
-            writer = null;
+
+            if (writer != null)
+            {
+                writer.Close();
+                writer.Dispose();
+                writer = null;
+            }
+
             state = RecorderState.Idling;
         }
     }

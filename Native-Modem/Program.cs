@@ -16,9 +16,9 @@ namespace Native_Modem
             Console.WriteLine("Press enter after setup the control panel");
             Console.ReadLine();
 
-            recorder.SetupArgs(1, 48000);
+            recorder.SetupArgs(48000, 16, 1);
 
-            if (!recorder.StartRecordAndPlayback("../../../record.wav", "../../../playback.wav"))
+            if (!recorder.StartRecordAndPlayback(recordPath:"../../../record.wav"))
             {
                 Console.WriteLine("Start record failed!");
                 recorder.Dispose();
