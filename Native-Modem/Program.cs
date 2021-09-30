@@ -8,20 +8,41 @@ namespace Native_Modem
 {
     class Program 
     {
-
         [STAThread]
-        static void Main(string[] args)
+        static void Main()
         {
-            //var recorder = new Recorder();
-            //recorder.setupRecordArgs(1, 48000);
-            //recorder.startRecord();
-            //Console.ReadLine();
-            //recorder.stopRecord();
-            var speaker = new Speaker();
-            speaker.setupSpeakArgs();
-            speaker.startPlayWAV(@"../../../b.wav");
+            Recorder recorder = new Recorder(SelectAsioDriver());
+            recorder.AsioOut.ShowControlPanel();
+            Console.WriteLine("Press enter after setup the control panel");
             Console.ReadLine();
-            speaker.stopPlayWAV();
+
+            recorder.SetupArgs(1, 48000);
+
+            if (!recorder.StartRecordAndPlayback("../../../record.wav", "../../../playback.wav"))
+            {
+                Console.WriteLine("Start record failed!");
+                recorder.Dispose();
+                return;
+            }
+
+            Console.WriteLine("Press enter to stop recording and playing...");
+            Console.ReadLine();
+            recorder.StopRecordAndPlayback();
+
+            recorder.Dispose();
+        }
+
+        static string SelectAsioDriver()
+        {
+            Console.WriteLine("Select an ASIO driver:");
+            string[] asioDriverName = AsioOut.GetDriverNames();
+            for (int i = 0; i < asioDriverName.Length; i++)
+            {
+                Console.WriteLine($"{i}: {asioDriverName[i]}");
+            }
+            string selected = asioDriverName[int.Parse(Console.ReadLine())];
+            Console.WriteLine($"Choosing the ASIO driver: {selected}");
+            return selected;
         }
     }
 }
