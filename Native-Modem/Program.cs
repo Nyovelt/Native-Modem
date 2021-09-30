@@ -16,7 +16,8 @@ namespace Native_Modem
             Console.WriteLine("Press enter after setup the control panel");
             Console.ReadLine();
 
-            recorder.SetupArgs(48000, 16, 1);
+            WaveFormat recordFormat = new WaveFormat(48000, 16, 1);
+            recorder.SetupArgs(recordFormat);
 
             if (!recorder.StartRecordAndPlayback(recordPath:"../../../record.wav"))
             {
