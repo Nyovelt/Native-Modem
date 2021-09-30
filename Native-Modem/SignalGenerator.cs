@@ -1,9 +1,5 @@
 ﻿using NAudio.Wave;
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Native_Modem
 {
@@ -24,16 +20,19 @@ namespace Native_Modem
 
         public int Read(byte[] buffer, int offset, int count)
         {
-            float samplePoint = offset / waveFormat.SampleRate;
+            float time = offset / waveFormat.SampleRate;
             float step = 1f / waveFormat.SampleRate;
             for (int i = 0; i < count; i++)
             {
                 float temp = 0f;
                 foreach (Signal signal in signals)
                 {
-                    temp += signal.Amplitude * MathF.Sin(TWO_PI * signal.Frequency + signal.Phase);
+                    temp += signal.Amplitude * MathF.Sin(TWO_PI * signal.Frequency * time + signal.Phase);
                 }
+
                 //TODO: write to buffer
+
+                time += step;
             }
 
             return count;
