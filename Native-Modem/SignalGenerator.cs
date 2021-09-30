@@ -3,22 +3,24 @@ using System;
 
 namespace Native_Modem
 {
-    public class SignalGenerator : IWaveProvider
+    public class SignalGenerator : ISampleProvider
     {
         readonly static float TWO_PI = 2f * MathF.PI;
 
         readonly WaveFormat waveFormat;
         readonly Signal[] signals;
+        readonly float gain;
 
-        public SignalGenerator(Signal[] signals, WaveFormat waveFormat)
+        public SignalGenerator(Signal[] signals, WaveFormat waveFormat, float gain = 1f)
         {
             this.signals = signals;
             this.waveFormat = waveFormat;
+            this.gain = gain;
         }
 
         public WaveFormat WaveFormat => waveFormat;
 
-        public int Read(byte[] buffer, int offset, int count)
+        public int Read(float[] buffer, int offset, int count)
         {
             float time = offset / waveFormat.SampleRate;
             float step = 1f / waveFormat.SampleRate;
@@ -30,7 +32,7 @@ namespace Native_Modem
                     temp += signal.Amplitude * MathF.Sin(TWO_PI * signal.Frequency * time + signal.Phase);
                 }
 
-                //TODO: write to buffer
+                buffer[i] = temp * gain;
 
                 time += step;
             }

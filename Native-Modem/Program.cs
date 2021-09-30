@@ -11,17 +11,25 @@ namespace Native_Modem
         [STAThread]
         static void Main()
         {
-            Recorder recorder = new Recorder(SelectAsioDriver());
-            recorder.AsioOut.ShowControlPanel();
+            string driverName = SelectAsioDriver();
+            AsioDriver driver = AsioDriver.GetAsioDriverByName(driverName);
+            driver.ControlPanel();
             Console.WriteLine("Press enter after setup the control panel");
             Console.ReadLine();
+            driver.ReleaseComAsioDriver();
 
-            WaveFormat recordFormat = new WaveFormat(48000, 16, 1);
+            Recorder recorder = new Recorder(driverName);
+
+            WaveFormat signalFormat = WaveFormat.CreateIeeeFloatWaveFormat(48000, 1);
+            WaveFormat recordFormat = WaveFormat.CreateIeeeFloatWaveFormat(48000, 1);
             recorder.SetupArgs(recordFormat);
 
-            if (!recorder.StartRecordAndPlayback(recordPath:"../../../record.wav"))
+            SignalGenerator signal = new SignalGenerator(new Signal[] {
+                new Signal() { Amplitude = 1f, Frequency = 1000f, Phase = 0f },
+                new Signal() { Amplitude = 1f, Frequency = 10000f, Phase = 0f } }, signalFormat, 0.02f);
+            if (!recorder.StartRecordAndPlayback(recordPath:"../../../record.wav", playbackProvider:signal))
             {
-                Console.WriteLine("Start record failed!");
+                Console.WriteLine("Start record and playback failed!");
                 recorder.Dispose();
                 return;
             }
@@ -36,7 +44,7 @@ namespace Native_Modem
         static string SelectAsioDriver()
         {
             Console.WriteLine("Select an ASIO driver:");
-            string[] asioDriverName = AsioOut.GetDriverNames();
+            string[] asioDriverName = AsioDriver.GetAsioDriverNames();
             for (int i = 0; i < asioDriverName.Length; i++)
             {
                 Console.WriteLine($"{i}: {asioDriverName[i]}");

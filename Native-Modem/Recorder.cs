@@ -73,6 +73,11 @@ namespace Native_Modem
             writer.WriteSamples(buffer, 0, sampleCount);
         }
 
+        public bool StartRecordAndPlayback(string recordPath = null, ISampleProvider playbackProvider = null)
+        {
+            return StartRecordAndPlayback(recordPath, playbackProvider.ToWaveProvider());
+        }
+
         public bool StartRecordAndPlayback(string recordPath = null, IWaveProvider playbackProvider = null)
         {
             if (state != RecorderState.Idling)
@@ -88,6 +93,7 @@ namespace Native_Modem
 
             if (record)
             {
+                writer = new WaveFileWriter(recordPath, recordFormat);
                 AsioOut.InitRecordAndPlayback(playbackProvider, recordFormat.Channels, recordFormat.SampleRate);
             }
             else
