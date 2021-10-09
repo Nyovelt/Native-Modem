@@ -5,13 +5,12 @@ namespace Native_Modem
 {
     public class SignalGenerator : ISampleProvider
     {
-        readonly static float TWO_PI = 2f * MathF.PI;
 
         readonly WaveFormat waveFormat;
-        readonly Signal[] signals;
+        readonly SinusoidalSignal[] signals;
         readonly float gain;
 
-        public SignalGenerator(Signal[] signals, WaveFormat waveFormat, float gain = 1f)
+        public SignalGenerator(SinusoidalSignal[] signals, WaveFormat waveFormat, float gain = 1f)
         {
             this.signals = signals;
             this.waveFormat = waveFormat;
@@ -27,9 +26,9 @@ namespace Native_Modem
             for (int i = 0; i < count; i++)
             {
                 float temp = 0f;
-                foreach (Signal signal in signals)
+                foreach (SinusoidalSignal signal in signals)
                 {
-                    temp += signal.Amplitude * MathF.Sin(TWO_PI * signal.Frequency * time + signal.Phase);
+                    temp += signal.Evaluate(time);
                 }
 
                 buffer[i] = temp * gain;
@@ -39,12 +38,5 @@ namespace Native_Modem
 
             return count;
         }
-    }
-
-    public struct Signal
-    {
-        public float Amplitude;
-        public float Frequency;
-        public float Phase;
     }
 }
