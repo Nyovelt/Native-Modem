@@ -4,30 +4,39 @@ namespace Native_Modem
 {
     public class Protocol
     {
-        public SampleStream Header { get; }
-        public SampleStream Carrier { get; }
+        public float[] Header { get; }
+        public SampleStream One { get; }
+        public SampleStream Zero { get; }
         public WaveFormat WaveFormat { get; }
         public int SamplesPerBit { get; }
         public int FrameSize { get; }
-        public int FrameSampleCount { get; }
+        public float Threshold { get; }
 
-        public Protocol(SampleStream header, SinusoidalSignal carrier, int sampleRate, int samplesPerBit, int frameSize)
+        public Protocol(float[] header, SinusoidalSignal one, SinusoidalSignal zero, int sampleRate, int samplesPerBit, int frameSize, float threshold)
         {
-            Header = header;
+            Header = header.Clone() as float[];
             WaveFormat = WaveFormat.CreateIeeeFloatWaveFormat(sampleRate, 1);
             SamplesPerBit = samplesPerBit;
             FrameSize = frameSize;
-            FrameSampleCount = samplesPerBit * frameSize;
+            Threshold = threshold;
 
-            float[] carrierSamples = new float[FrameSampleCount];
+            float[] samples = new float[samplesPerBit];
             float time = 0f;
             float timeStep = 1f / sampleRate;
-            for (int i = 0; i < FrameSampleCount; i++)
+            for (int i = 0; i < samplesPerBit; i++)
             {
-                carrierSamples[i] = carrier.Evaluate(time);
+                samples[i] = one.Evaluate(time);
                 time += timeStep;
             }
-            Carrier = new SampleStream(WaveFormat, carrierSamples);
+            One = new SampleStream(WaveFormat, samples);
+
+            time = 0f;
+            for (int i = 0; i < samplesPerBit; i++)
+            {
+                samples[i] = zero.Evaluate(time);
+                time += timeStep;
+            }
+            Zero = new SampleStream(WaveFormat, samples);
         }
     }
 }
