@@ -62,7 +62,6 @@ namespace Native_Modem
             return new SampleStream(protocol.WaveFormat, stream);
         }
 
-        const float SYNC_POWER_THRESHOLD = 0f;
         const int DECODE_WAIT_SAMPLES = 200;
         static readonly float K1 = 63f / 64f;
         static readonly float K2 = 1f / 64f;
@@ -73,16 +72,18 @@ namespace Native_Modem
             Decode
         }
 
-        public List<BitArray> Demodulate(SampleStream sampleStream)
+        public List<BitArray> Demodulate(SampleStream sampleStream, float syncPowerThreshold)
         {
             List<BitArray> results = new List<BitArray>();
             float power = 0f;
+            float[] powerDebug = new float[sampleStream.Length];
             int startIndex = -1;
             RingBuffer<float> syncBuffer = new RingBuffer<float>(protocol.Header.Length);
             for (int i = 0; i < protocol.Header.Length; i++)
             {
                 syncBuffer.Add(0f);
             }
+            float[] syncPowerDebug = new float[sampleStream.Length];
             float syncPowerLocalMax = 0f;
 
             List<float> decodeFrame = new List<float>(protocol.FrameSize * protocol.SamplesPerBit);
@@ -93,6 +94,7 @@ namespace Native_Modem
             {
                 float sample = sampleStream[i];
                 power = power * K1 + sample * sample * K2;
+                powerDebug[i] = power;
 
                 switch (state)
                 {
@@ -104,8 +106,9 @@ namespace Native_Modem
                         {
                             syncPower += syncBuffer[j] * protocol.Header[j];
                         }
+                        syncPowerDebug[i] = syncPower;
                         
-                        if (syncPower > power * 2f && syncPower > syncPowerLocalMax && syncPower > SYNC_POWER_THRESHOLD)
+                        if (syncPower > power * 2f && syncPower > syncPowerLocalMax && syncPower > syncPowerThreshold)
                         {
                             syncPowerLocalMax = syncPower;
                             startIndex = i;
