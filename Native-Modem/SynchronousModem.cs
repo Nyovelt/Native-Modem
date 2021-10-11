@@ -26,6 +26,7 @@ namespace Native_Modem
         readonly float[] buffer = new float[1024];
 
         ModemState modemState;
+        WaveFileWriter writer;
 
         public SynchronousModem(Protocol protocol, string driverName)
         {
@@ -43,7 +44,7 @@ namespace Native_Modem
             modemState = ModemState.Idling;
         }
 
-        public void Start(Action<BitArray> onFrameReceived)
+        public void Start(Action<BitArray> onFrameReceived, string saveRecordTo = null)
         {
             if (modemState != ModemState.Idling)
             {
@@ -52,7 +53,12 @@ namespace Native_Modem
 
             modemState = ModemState.Running;
             _ = Modulate();
-            _ = Demodulate(onFrameReceived, 3f);
+            _ = Demodulate(onFrameReceived, 10f);
+
+            if (!string.IsNullOrEmpty(saveRecordTo))
+            {
+                writer = new WaveFileWriter(saveRecordTo, protocol.WaveFormat);
+            }
 
             asioOut.AudioAvailable += OnAsioOutAudioAvailable;
             asioOut.Play();
@@ -69,6 +75,11 @@ namespace Native_Modem
 
             asioOut.Stop();
             asioOut.AudioAvailable -= OnAsioOutAudioAvailable;
+
+            if (writer != null)
+            {
+                writer.Dispose();
+            }
         }
 
         public void Dispose()
@@ -89,6 +100,10 @@ namespace Native_Modem
         {
             int sampleCount = e.GetAsInterleavedSamples(buffer);
             RxFIFO.Push(buffer, sampleCount);
+            if (writer != null)
+            {
+                writer.WriteSamples(buffer, 0, sampleCount);
+            }
         }
 
         void SetupAsioOut()

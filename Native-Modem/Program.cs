@@ -20,6 +20,42 @@ namespace Native_Modem
             //RecordAndPlay();
             //ModemTest();
             SynchronousModemTest();
+            CompareResult();
+        }
+
+        static void CompareResult()
+        {
+            StreamReader iStream = new StreamReader("../../../INPUT.txt");
+            StreamReader oStream = new StreamReader("../../../OUTPUT.txt");
+            string input = iStream.ReadToEnd();
+            string output = oStream.ReadToEnd();
+            iStream.Close();
+            oStream.Close();
+
+            if (input.Length != output.Length)
+            {
+                Console.WriteLine($"Input and output have different length! In: {input.Length}, Out: {output.Length}");
+            }
+            else
+            {
+                int sameCount = 0;
+                for (int i = 0; i < input.Length; i++)
+                {
+                    if (input[i] == output[i])
+                    {
+                        sameCount++;
+                    }
+                }
+
+                Console.WriteLine($"Correct bits: {sameCount} / {input.Length}, {(float)sameCount / input.Length}%");
+            }
+        }
+
+        static byte[] BitArrayToByteArray(BitArray bitArray)
+        {
+            byte[] result = new byte[(bitArray.Length - 1) >> 3 + 1];
+            bitArray.CopyTo(result, 0);
+            return result;
         }
 
         static void SynchronousModemTest()
@@ -53,6 +89,8 @@ namespace Native_Modem
             }
             SynchronousModem modem = new SynchronousModem(protocol, driverName);
 
+            //Start modem and prepare to write to file
+            StreamWriter writer = new StreamWriter("../../../OUTPUT.txt");
             int frameCount = 0;
             modem.Start(array =>
             {
@@ -60,16 +98,17 @@ namespace Native_Modem
                 foreach (bool bit in array)
                 {
                     Console.Write(bit ? 1 : 0);
+                    writer.Write(bit ? 1 : 0);
                 }
                 Console.WriteLine();
                 frameCount++;
-            });
+            }, "../../../receiverRecord.wav");
 
             Console.WriteLine("Press enter to send a bit array");
             Console.ReadLine();
 
-            //Get input bits
-            StreamReader inputStream = new StreamReader("../../../input.txt");
+            //Get input bits and transport
+            StreamReader inputStream = new StreamReader("../../../INPUT.txt");
             BitArray bitArray = BitReader.ReadBits(inputStream);
             inputStream.Close();
             modem.Transport(bitArray);
@@ -79,6 +118,7 @@ namespace Native_Modem
             Console.WriteLine($"Received {frameCount} frames in total.");
 
             modem.Stop();
+            writer.Close();
             modem.Dispose();
         }
 
@@ -124,7 +164,7 @@ namespace Native_Modem
                 {
                     case 's':
                         //Get input bits
-                        StreamReader inputStream = new StreamReader("../../../input.txt");
+                        StreamReader inputStream = new StreamReader("../../../INPUT.txt");
                         BitArray bitArray = BitReader.ReadBits(inputStream);
                         inputStream.Close();
 
@@ -177,7 +217,7 @@ namespace Native_Modem
 
         static void GenerateRandomBits()
         {
-            StreamWriter file = new StreamWriter("../../../input.txt");
+            StreamWriter file = new StreamWriter("../../../INPUT.txt");
             Random random = new Random();
             for (int i = 0; i < 10000; i++)
             {
