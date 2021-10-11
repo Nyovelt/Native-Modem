@@ -5,8 +5,8 @@ namespace Native_Modem
     public class Protocol
     {
         public float[] Header { get; }
-        public SampleStream One { get; }
-        public SampleStream Zero { get; }
+        public float[] One { get; }
+        public float[] Zero { get; }
         public WaveFormat WaveFormat { get; }
         public int SamplesPerBit { get; }
         public int FrameSize { get; }
@@ -20,23 +20,22 @@ namespace Native_Modem
             FrameSize = frameSize;
             Threshold = threshold;
 
-            float[] samples = new float[samplesPerBit];
+            One = new float[samplesPerBit];
             float time = 0f;
             float timeStep = 1f / sampleRate;
             for (int i = 0; i < samplesPerBit; i++)
             {
-                samples[i] = one.Evaluate(time);
+                One[i] = one.Evaluate(time);
                 time += timeStep;
             }
-            One = new SampleStream(WaveFormat, samples);
 
+            Zero = new float[samplesPerBit];
             time = 0f;
             for (int i = 0; i < samplesPerBit; i++)
             {
-                samples[i] = zero.Evaluate(time);
+                Zero[i] = zero.Evaluate(time);
                 time += timeStep;
             }
-            Zero = new SampleStream(WaveFormat, samples);
         }
     }
 }

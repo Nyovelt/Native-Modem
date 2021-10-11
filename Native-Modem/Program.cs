@@ -18,7 +18,68 @@ namespace Native_Modem
         {
             //GenerateRandomBits();
             //RecordAndPlay();
-            ModemTest();
+            //ModemTest();
+            SynchronousModemTest();
+        }
+
+        static void SynchronousModemTest()
+        {
+            float[] header = new float[480];
+            for (int i = 0; i < 480; i++)
+            {
+                header[i] = (float)FMCW[i] * 0.5f;
+            }
+
+            Protocol protocol = new Protocol(
+                   header,
+                   new SinusoidalSignal(0.5f, 1000f, 0f),
+                   new SinusoidalSignal(0.5f, 1000f, 180f),
+                   48000,
+                   48,
+                   96,
+                   0f);
+            string driverName = SelectAsioDriver();
+            Console.WriteLine("Do you want to configure the control panel? (y/n)");
+            if (char.TryParse(Console.ReadLine(), out char c))
+            {
+                if (c == 'y')
+                {
+                    AsioDriver driver = AsioDriver.GetAsioDriverByName(driverName);
+                    driver.ControlPanel();
+                    Console.WriteLine("Press enter after setup the control panel");
+                    Console.ReadLine();
+                    driver.ReleaseComAsioDriver();
+                }
+            }
+            SynchronousModem modem = new SynchronousModem(protocol, driverName);
+
+            int frameCount = 0;
+            modem.Start(array =>
+            {
+                Console.Write($"Received frame {frameCount}:");
+                foreach (bool bit in array)
+                {
+                    Console.Write(bit ? 1 : 0);
+                }
+                Console.WriteLine();
+                frameCount++;
+            });
+
+            Console.WriteLine("Press enter to send a bit array");
+            Console.ReadLine();
+
+            //Get input bits
+            StreamReader inputStream = new StreamReader("../../../input.txt");
+            BitArray bitArray = BitReader.ReadBits(inputStream);
+            inputStream.Close();
+            modem.Transport(bitArray);
+
+            Console.WriteLine("Press enter to stop modem...");
+            Console.ReadLine();
+            Console.WriteLine($"Received {frameCount} frames in total.");
+
+            modem.Stop();
+            modem.Dispose();
         }
 
         static void ModemTest()
