@@ -21,8 +21,8 @@ namespace Native_Modem
             //GenerateRandomBits();
             //RecordAndPlay();
             PreambleBuild(48000, 480, 1);
-            ModemTest(); // Remind: I have changed the PATH of sendRecord !!  
-            //SynchronousModemTest();
+            //ModemTest(); // Remind: I have changed the PATH of sendRecord !!  
+            SynchronousModemTest();
             CompareResult();
         }
 
@@ -36,7 +36,7 @@ namespace Native_Modem
                 var totalTime = (float)SampleCount / SampleRate;
                 var time = (float)i / SampleRate;
                 const float frequencyMin = 4000;
-                const float frequencyMax = 9000;
+                const float frequencyMax = 10000;
                 var a = (frequencyMax - frequencyMin) * 2 / totalTime;
                 if (i < SampleCount / 2)
                 {
@@ -97,8 +97,8 @@ namespace Native_Modem
 
             Protocol protocol = new Protocol(
                    header,
-                   new SinusoidalSignal(1f, 8000f, 0f),
-                   new SinusoidalSignal(1f, 8000f, 180f),
+                   new SinusoidalSignal(1f, 2000f, 0f),
+                   new SinusoidalSignal(1f, 2000f, 180f),
                    48000,
                    24,
                    100,
