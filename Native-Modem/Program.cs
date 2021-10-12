@@ -63,15 +63,15 @@ namespace Native_Modem
             float[] header = new float[480];
             for (int i = 0; i < 480; i++)
             {
-                header[i] = (float)FMCW[i] * 0.5f;
+                header[i] = (float)FMCW[i] * 1f;
             }
 
             Protocol protocol = new Protocol(
                    header,
-                   new SinusoidalSignal(0.5f, 1000f, 0f),
-                   new SinusoidalSignal(0.5f, 1000f, 180f),
+                   new SinusoidalSignal(1f, 8000f, 0f),
+                   new SinusoidalSignal(1f, 8000f, 180f),
                    48000,
-                   48,
+                   24,
                    96,
                    0f);
             string driverName = SelectAsioDriver();
