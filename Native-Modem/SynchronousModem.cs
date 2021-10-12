@@ -170,10 +170,10 @@ namespace Native_Modem
                     await TaskUtilities.WaitUntil(() => TxFIFO.AvailableFor(frameSampleCount));
 
                     TxFIFO.Push(protocol.Header);
-                    await Task.Delay(50);
+                    await Task.Delay(10);
                     ModulateFrame(array, bitCount);
                     bitCount += protocol.FrameSize;
-                    await Task.Delay(50);
+                    await Task.Delay(10);
                 }
             }
         }
