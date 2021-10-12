@@ -10,6 +10,15 @@ namespace Native_Modem
         public static BitArray ReadBits(StreamReader stringStream)
         {
             List<bool> bits = new List<bool>();
+
+            //  Hack: Add 100 zeros for heating 
+            Random rd = new Random();
+            for (var i=0;i < 100; ++i)
+            {
+                bits.Add(rd.Next(0,2) == 0);
+            }
+
+
             foreach (char c in stringStream.ReadLine())
             {
                 if (int.TryParse(c.ToString(), out int bit) && (bit == 0 || bit == 1))

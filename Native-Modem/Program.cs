@@ -21,8 +21,8 @@ namespace Native_Modem
             //GenerateRandomBits();
             //RecordAndPlay();
             PreambleBuild(48000, 480, 1);
-            //ModemTest(); // Remind: I have changed the PATH of sendRecord !!  
-            SynchronousModemTest();
+            ModemTest(); // Remind: I have changed the PATH of sendRecord !!  
+            //SynchronousModemTest();
             CompareResult();
         }
 
@@ -124,10 +124,13 @@ namespace Native_Modem
             modem.Start(array =>
             {
                 Console.Write($"Received frame {frameCount}:");
+                int index = 0;
                 foreach (bool bit in array)
                 {
+                    index += 1;
                     Console.Write(bit ? 1 : 0);
-                    writer.Write(bit ? 1 : 0);
+                    if (index > 100)
+                        writer.Write(bit ? 1 : 0);
                 }
                 Console.WriteLine();
                 frameCount++;
@@ -138,7 +141,8 @@ namespace Native_Modem
 
             //Get input bits and transport
             StreamReader inputStream = new StreamReader("../../../INPUT.txt");
-            BitArray bitArray = BitReader.ReadBits(inputStream);
+            BitArray bitArray = 
+                BitReader.ReadBits(inputStream);
             inputStream.Close();
             modem.Transport(bitArray);
 
