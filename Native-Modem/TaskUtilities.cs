@@ -8,7 +8,7 @@ namespace Native_Modem
 {
     public static class TaskUtilities
     {
-        const int SMALL_DELAY = 10;
+        const int SMALL_DELAY = 25;
 
         public static async Task WaitUntil(Func<bool> untilTrue)
         {

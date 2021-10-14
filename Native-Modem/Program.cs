@@ -26,6 +26,7 @@ namespace Native_Modem
             //ModemTest(); // Remind: I have changed the PATH of sendRecord !!  
             SynchronousModemTest();
             CompareResult();
+            Console.ReadLine();
         }
 
         static void ReedSolomonTest()
