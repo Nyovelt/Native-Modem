@@ -1,10 +1,13 @@
 ﻿using NAudio.Wave;
+using System;
 
 namespace Native_Modem
 {
     public class Protocol
     {
         public float[] Header { get; }
+        public float HeaderPower { get; }
+        public float HeaderMagnitude { get; }
         public float[] One { get; }
         public float[] Zero { get; }
         public WaveFormat WaveFormat { get; }
@@ -15,6 +18,12 @@ namespace Native_Modem
         public Protocol(float[] header, SinusoidalSignal one, SinusoidalSignal zero, int sampleRate, int samplesPerBit, int frameSize, float threshold)
         {
             Header = header.Clone() as float[];
+            HeaderPower = 0f;
+            foreach (float sample in header)
+            {
+                HeaderPower += sample * sample;
+            }
+            HeaderMagnitude = MathF.Sqrt(HeaderPower);
             WaveFormat = WaveFormat.CreateIeeeFloatWaveFormat(sampleRate, 1);
             SamplesPerBit = samplesPerBit;
             FrameSize = frameSize;
