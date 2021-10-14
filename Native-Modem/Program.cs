@@ -6,6 +6,7 @@ using System.Collections;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Diagnostics;
+using STH1123.ReedSolomon;
 
 namespace Native_Modem
 {
@@ -18,12 +19,39 @@ namespace Native_Modem
         [STAThread]
         static void Main()
         {
+            //ReedSolomonTest();
             //GenerateRandomBits();
             //RecordAndPlay();
             PreambleBuild(48000, 480, 1);
             //ModemTest(); // Remind: I have changed the PATH of sendRecord !!  
             SynchronousModemTest();
             CompareResult();
+        }
+
+        static void ReedSolomonTest()
+        {
+            int[] input = new int[] { 0x48, 0x65, 0x6C, 0x6C, 0x6F, 0x20, 0x57, 0x6F, 0x72, 0x6C, 0x64, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+            foreach (int i in input)
+            {
+                Console.Write($"{i}, ");
+            }
+            Console.WriteLine();
+            GenericGF gf = new GenericGF(285, 256, 1);
+            ReedSolomonEncoder encoder = new ReedSolomonEncoder(gf);
+            encoder.Encode(input, 6);
+            foreach (int i in input)
+            {
+                Console.Write($"{i}, ");
+            }
+            Console.WriteLine();
+
+            ReedSolomonDecoder decoder = new ReedSolomonDecoder(gf);
+            Console.WriteLine(decoder.Decode(input, 6));
+            foreach (int i in input)
+            {
+                Console.Write($"{i}, ");
+            }
+            Console.WriteLine();
         }
 
         static void PreambleBuild(int SampleRate, int SampleCount, int amplitude)
@@ -92,7 +120,7 @@ namespace Native_Modem
             float[] header = new float[480];
             for (int i = 0; i < 480; i++)
             {
-                header[i] = (float)preamble[i] * 1f;
+                header[i] = preamble[i] * 1f;
             }
 
             Protocol protocol = new Protocol(
@@ -127,8 +155,7 @@ namespace Native_Modem
                 foreach (bool bit in array)
                 {
                     Console.Write(bit ? 1 : 0);
-                    if(frameCount > 2)
-                        writer.Write(bit ? 1 : 0); 
+                    writer.Write(bit ? 1 : 0); 
                 }
                 Console.WriteLine();
                 frameCount++;
@@ -139,8 +166,7 @@ namespace Native_Modem
 
             //Get input bits and transport
             StreamReader inputStream = new StreamReader("../../../INPUT.txt");
-            BitArray bitArray = 
-                BitReader.DirtyReadBits(inputStream);
+            BitArray bitArray = BitReader.ReadBits(inputStream);
             inputStream.Close();
             modem.Transport(bitArray);
 
@@ -196,7 +222,7 @@ namespace Native_Modem
                     case 's':
                         //Get input bits
                         StreamReader inputStream = new StreamReader("../../../INPUT.txt");
-                        BitArray bitArray = BitReader.DirtyReadBits(inputStream);
+                        BitArray bitArray = BitReader.ReadBits(inputStream);
                         inputStream.Close();
 
                         //Modulate to samples

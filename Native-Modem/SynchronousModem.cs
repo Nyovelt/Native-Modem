@@ -4,6 +4,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using STH1123.ReedSolomon;
 
 namespace Native_Modem
 {
@@ -24,6 +25,7 @@ namespace Native_Modem
         readonly Queue<BitArray> modulateQueue;
 
         readonly float[] buffer = new float[1024];
+        readonly float[] preheater = new float[760];
 
         ModemState modemState;
         WaveFileWriter writer;
@@ -31,6 +33,15 @@ namespace Native_Modem
         public SynchronousModem(Protocol protocol, string driverName)
         {
             this.protocol = protocol;
+
+            SinusoidalSignal preheaterSignal = new SinusoidalSignal(1f, 2000f);
+            float time = 0f;
+            float step = 1f / protocol.WaveFormat.SampleRate;
+            for (int i = 0; i < preheater.Length; i++)
+            {
+                preheater[i] = preheaterSignal.Evaluate(time);
+                time += step;
+            }
 
             frameSampleCount = protocol.Header.Length + protocol.FrameSize * protocol.SamplesPerBit;
             TxFIFO = new SampleFIFO(protocol.WaveFormat, frameSampleCount << 1);
@@ -53,7 +64,7 @@ namespace Native_Modem
 
             modemState = ModemState.Running;
             _ = Modulate();
-            _ = Demodulate(onFrameReceived, 0.5f);
+            _ = Demodulate(onFrameReceived, 0.35f);
 
             if (!string.IsNullOrEmpty(saveRecordTo))
             {
@@ -99,6 +110,10 @@ namespace Native_Modem
         void OnAsioOutAudioAvailable(object sender, AsioAudioAvailableEventArgs e)
         {
             int sampleCount = e.GetAsInterleavedSamples(buffer);
+            if (!RxFIFO.AvailableFor(sampleCount))
+            {
+                Console.WriteLine("RxFIFO overflow!!!!!");
+            }
             RxFIFO.Push(buffer, sampleCount);
             if (writer != null)
             {
@@ -125,7 +140,7 @@ namespace Native_Modem
                 Console.WriteLine($"Output channel {i}: {asioOut.AsioOutputChannelName(i)}");
             }
             int outChannel = int.Parse(Console.ReadLine());
-            asioOut.ChannelOffset = outChannel; // Todo: Different from the sample
+            asioOut.ChannelOffset = outChannel;
             Console.WriteLine($"Choosing the output channel: {asioOut.AsioOutputChannelName(outChannel)}");
         }
 
@@ -147,13 +162,33 @@ namespace Native_Modem
 
         async Task Modulate()
         {
-            while (true)
+            if (modemState != ModemState.Running)
             {
-                await TaskUtilities.WaitUntil(() => modulateQueue.Count > 0 || modemState != ModemState.Running);
-
-                if (modemState != ModemState.Running)
+                return;
+            }
+            else if (modulateQueue.Count != 0)
+            {
+                if (!await TaskUtilities.WaitUntilUnless(() => TxFIFO.AvailableFor(preheater.Length), () => modemState != ModemState.Running))
                 {
                     return;
+                }
+                TxFIFO.Push(preheater);
+            }
+
+            while (true)
+            {
+                if (modulateQueue.Count == 0)
+                {
+                    if (!await TaskUtilities.WaitUntilUnless(() => modulateQueue.Count > 0, () => modemState != ModemState.Running))
+                    {
+                        return;
+                    }
+
+                    if (!await TaskUtilities.WaitUntilUnless(() => TxFIFO.AvailableFor(preheater.Length), () => modemState != ModemState.Running))
+                    {
+                        return;
+                    }
+                    TxFIFO.Push(preheater);
                 }
 
                 BitArray array = modulateQueue.Dequeue();
@@ -167,13 +202,13 @@ namespace Native_Modem
                 int bitCount = 0;
                 for (int i = 0; i < frames; i++)
                 {
-                    await TaskUtilities.WaitUntil(() => TxFIFO.AvailableFor(frameSampleCount));
-
+                    if (!await TaskUtilities.WaitUntilUnless(() => TxFIFO.AvailableFor(frameSampleCount), () => modemState != ModemState.Running))
+                    {
+                        return;
+                    }
                     TxFIFO.Push(protocol.Header);
-                    await Task.Delay(10);
                     ModulateFrame(array, bitCount);
                     bitCount += protocol.FrameSize;
-                    await Task.Delay(10);
                 }
             }
         }
@@ -208,8 +243,7 @@ namespace Native_Modem
 
             while (true)
             {
-                await TaskUtilities.WaitUntil(() => !RxFIFO.IsEmpty || modemState != ModemState.Running);
-                if (modemState != ModemState.Running)
+                if (!await TaskUtilities.WaitUntilUnless(() => !RxFIFO.IsEmpty, () => modemState != ModemState.Running))
                 {
                     return;
                 }
@@ -232,9 +266,9 @@ namespace Native_Modem
                         {
                             syncPower += gain * syncBuffer[j] * protocol.Header[j];
                         }
+                        //Console.WriteLine($"syncPower: {syncPower}, localMax: {syncPowerLocalMax}, threshold: {protocol.HeaderPower * syncPowerThreshold}");
                         if (syncPower > protocol.HeaderPower * syncPowerThreshold && syncPower > syncPowerLocalMax)
                         {
-                            //Console.WriteLine($"syncPower: {syncPower}, localMax: {syncPowerLocalMax}, threshold: {protocol.HeaderPower * syncPowerThreshold}");
                             syncPowerLocalMax = syncPower;
                             decode = true;
                             decodeFrame.Clear();

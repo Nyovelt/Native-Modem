@@ -17,5 +17,27 @@ namespace Native_Modem
                 await Task.Delay(SMALL_DELAY);
             }
         }
+
+        /// <summary>
+        /// Wait until a condition is met (returns true), unless another condition is met (returns false)
+        /// </summary>
+        /// <param name="until"></param>
+        /// <param name="unless"></param>
+        /// <returns></returns>
+        public static async Task<bool> WaitUntilUnless(Func<bool> until, Func<bool> unless)
+        {
+            while (true)
+            {
+                if (until.Invoke())
+                {
+                    return true;
+                }
+                if (unless.Invoke())
+                {
+                    return false;
+                }
+                await Task.Delay(SMALL_DELAY);
+            }
+        }
     }
 }
