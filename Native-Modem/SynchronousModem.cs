@@ -53,7 +53,7 @@ namespace Native_Modem
 
             modemState = ModemState.Running;
             _ = Modulate();
-            _ = Demodulate(onFrameReceived, 0.5f);
+            _ = Demodulate(onFrameReceived, 10f);
 
             if (!string.IsNullOrEmpty(saveRecordTo))
             {
@@ -179,6 +179,8 @@ namespace Native_Modem
         }
 
         const int DECODE_WAIT_SAMPLES = 200;
+        static readonly float K1 = 63f / 64f;
+        static readonly float K2 = 1f / 64f;
 
         enum DemodulateState
         {
@@ -188,13 +190,8 @@ namespace Native_Modem
 
         async Task Demodulate(Action<BitArray> onFrameReceived, float syncPowerThreshold)
         {
+            float power = 0f;
             bool decode = false;
-            RingBuffer<float> powerBuffer = new RingBuffer<float>(protocol.Header.Length);
-            for (int i = 0; i < protocol.Header.Length; i++)
-            {
-                powerBuffer.Add(0f);
-            }
-            float powerSum = 0f;
             RingBuffer<float> syncBuffer = new RingBuffer<float>(protocol.Header.Length);
             for (int i = 0; i < protocol.Header.Length; i++)
             {
@@ -215,26 +212,21 @@ namespace Native_Modem
                 }
 
                 float sample = RxFIFO.Pop();
-                powerSum -= powerBuffer.ReadAndRemoveNext();
-                float temp = sample * sample;
-                powerSum += temp;
-                powerBuffer.Add(temp);
-
-                syncBuffer.ReadAndRemoveNext();
-                syncBuffer.Add(sample);
+                power = power * K1 + sample * sample * K2;
 
                 switch (state)
                 {
                     case DemodulateState.Sync:
+                        syncBuffer.ReadAndRemoveNext();
+                        syncBuffer.Add(sample);
                         float syncPower = 0f;
-                        float gain = protocol.HeaderMagnitude / MathF.Sqrt(powerSum);
                         for (int j = 0; j < protocol.Header.Length; j++)
                         {
-                            syncPower += gain * syncBuffer[j] * protocol.Header[j];
+                            syncPower += syncBuffer[j] * protocol.Header[j];
                         }
-                        if (syncPower > protocol.HeaderPower * syncPowerThreshold && syncPower > syncPowerLocalMax)
+
+                        if (syncPower > power * 2f && syncPower > syncPowerLocalMax && syncPower > syncPowerThreshold)
                         {
-                            //Console.WriteLine($"syncPower: {syncPower}, localMax: {syncPowerLocalMax}, threshold: {protocol.HeaderPower * syncPowerThreshold}");
                             syncPowerLocalMax = syncPower;
                             decode = true;
                             decodeFrame.Clear();
