@@ -7,13 +7,30 @@ namespace Native_Modem
     {
         readonly WaveFormat waveFormat;
         readonly RingBuffer<float> ringBuffer;
+        readonly WaveFileWriter writer;
 
         public WaveFormat WaveFormat => waveFormat;
 
-        public SampleFIFO(WaveFormat waveFormat, int size)
+        public SampleFIFO(WaveFormat waveFormat, int size, string saveAudioTo = null)
         {
             this.waveFormat = waveFormat;
             ringBuffer = new RingBuffer<float>(size);
+            if (!string.IsNullOrEmpty(saveAudioTo))
+            {
+                writer = new WaveFileWriter(saveAudioTo, waveFormat);
+            }
+            else
+            {
+                writer = null;
+            }
+        }
+
+        public void Dispose()
+        {
+            if (writer != null)
+            {
+                writer.Dispose();
+            }
         }
 
         public bool AvailableFor(int sampleCount)
@@ -23,16 +40,15 @@ namespace Native_Modem
 
         public bool IsEmpty => ringBuffer.Count == 0;
 
-        public void Push(float sample)
-        {
-            ringBuffer.Add(sample);
-        }
-
         public void Push(float[] samples)
         {
             foreach (float sample in samples)
             {
                 ringBuffer.Add(sample);
+            }
+            if (writer != null)
+            {
+                writer.WriteSamples(samples, 0, samples.Length);
             }
         }
 
@@ -41,6 +57,10 @@ namespace Native_Modem
             for (int i = 0; i < count; i++)
             {
                 ringBuffer.Add(sampleBuffer[i]);
+            }
+            if (writer != null)
+            {
+                writer.WriteSamples(sampleBuffer, 0, count);
             }
         }
 

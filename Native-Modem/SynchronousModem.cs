@@ -28,9 +28,8 @@ namespace Native_Modem
         readonly float[] preheater = new float[760];
 
         ModemState modemState;
-        WaveFileWriter writer;
 
-        public SynchronousModem(Protocol protocol, string driverName)
+        public SynchronousModem(Protocol protocol, string driverName, string saveTransportTo = null, string saveRecordTo = null)
         {
             this.protocol = protocol;
 
@@ -44,8 +43,8 @@ namespace Native_Modem
             }
 
             frameSampleCount = protocol.Header.Length + protocol.FrameSize * protocol.SamplesPerBit;
-            TxFIFO = new SampleFIFO(protocol.WaveFormat, frameSampleCount << 1);
-            RxFIFO = new SampleFIFO(protocol.WaveFormat, frameSampleCount);
+            TxFIFO = new SampleFIFO(protocol.WaveFormat, frameSampleCount << 1, saveTransportTo);
+            RxFIFO = new SampleFIFO(protocol.WaveFormat, frameSampleCount, saveRecordTo);
             modulateQueue = new Queue<BitArray>();
 
             asioOut = new AsioOut(driverName);
@@ -55,7 +54,7 @@ namespace Native_Modem
             modemState = ModemState.Idling;
         }
 
-        public void Start(Action<BitArray> onFrameReceived, string saveRecordTo = null)
+        public void Start(Action<BitArray> onFrameReceived)
         {
             if (modemState != ModemState.Idling)
             {
@@ -63,13 +62,9 @@ namespace Native_Modem
             }
 
             modemState = ModemState.Running;
+
             _ = Modulate();
             _ = Demodulate(onFrameReceived, 0.35f);
-
-            if (!string.IsNullOrEmpty(saveRecordTo))
-            {
-                writer = new WaveFileWriter(saveRecordTo, protocol.WaveFormat);
-            }
 
             asioOut.AudioAvailable += OnAsioOutAudioAvailable;
             asioOut.Play();
@@ -86,11 +81,6 @@ namespace Native_Modem
 
             asioOut.Stop();
             asioOut.AudioAvailable -= OnAsioOutAudioAvailable;
-
-            if (writer != null)
-            {
-                writer.Dispose();
-            }
         }
 
         public void Dispose()
@@ -100,6 +90,8 @@ namespace Native_Modem
                 Stop();
             }
             asioOut.Dispose();
+            TxFIFO.Dispose();
+            RxFIFO.Dispose();
         }
 
         public void Transport(BitArray bitArray)
@@ -115,10 +107,6 @@ namespace Native_Modem
                 Console.WriteLine("RxFIFO overflow!!!!!");
             }
             RxFIFO.Push(buffer, sampleCount);
-            if (writer != null)
-            {
-                writer.WriteSamples(buffer, 0, sampleCount);
-            }
         }
 
         void SetupAsioOut()
@@ -298,11 +286,11 @@ namespace Native_Modem
                             {
                                 int index = j * protocol.SamplesPerBit;
 
-                                int half = protocol.SamplesPerBit >> 1;
-                                int quarter = half >> 1;
-                                int end = half + quarter;
+                                //int half = protocol.SamplesPerBit >> 1;
+                                //int quarter = half >> 1;
+                                //int end = half + quarter;
                                 float sum = 0f;
-                                for (int k = quarter; k < end; k++)
+                                for (int k = 0; k < protocol.SamplesPerBit; k++)
                                 {
                                     sum += decodeFrame[index + k] * protocol.One[k];
                                 }
