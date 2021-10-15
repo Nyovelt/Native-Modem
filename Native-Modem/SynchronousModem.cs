@@ -60,7 +60,7 @@ namespace Native_Modem
             }
         }
 
-        public void Start(Action<BitArray> onFrameReceived)
+        public void Start(FrameReceived onFrameReceived)
         {
             if (modemState != ModemState.Idling)
             {
@@ -219,7 +219,10 @@ namespace Native_Modem
             Decode
         }
 
-        async Task Demodulate(Action<BitArray> onFrameReceived, float syncPowerThreshold)
+        public delegate void FrameReceived(BitArray bitArray);
+
+
+        async Task Demodulate(FrameReceived onFrameReceived, float syncPowerThreshold)
         {
             bool decode = false;
             RingBuffer<float> syncBuffer = new RingBuffer<float>(protocol.Header.Length);
@@ -304,7 +307,7 @@ namespace Native_Modem
 
                             // can add error correction / detection here
 
-                            onFrameReceived.Invoke(new BitArray(bits));
+                            onFrameReceived(new BitArray(bits));
 
                             decode = false;
                             state = DemodulateState.Sync;

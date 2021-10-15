@@ -17,7 +17,8 @@ namespace Native_Modem
         static void Main()
         {
             //ReedSolomonTest();
-            GenerateRandomBits();
+            //return;
+            //GenerateRandomBits();
             //RecordAndPlay();
             PreambleBuild(48000, 480, 1);
             //ModemTest(); // Remind: I have changed the PATH of sendRecord !!  
@@ -28,28 +29,16 @@ namespace Native_Modem
 
         static void ReedSolomonTest()
         {
-            int[] input = new int[] { 0x48, 0x65, 0x6C, 0x6C, 0x6F, 0x20, 0x57, 0x6F, 0x72, 0x6C, 0x64, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
-            foreach (int i in input)
-            {
-                Console.Write($"{i}, ");
-            }
-            Console.WriteLine();
-            GenericGF gf = new GenericGF(285, 256, 1);
-            ReedSolomonEncoder encoder = new ReedSolomonEncoder(gf);
-            encoder.Encode(input, 6);
-            foreach (int i in input)
-            {
-                Console.Write($"{i}, ");
-            }
-            Console.WriteLine();
+            var input = new byte[] { 0x48, 0x65, 0x6C, 0x6C, 0x6F, 0x20, 0x57, 0x6F, 0x72, 0x6C, 0x64 };
+            Console.WriteLine(BitConverter.ToString(input));
+            GenericGF gf = new(285, 256, 1);
+            ReedSolomonEncoder encoder = new(gf);
+            var result = encoder.EncodeEx(input, 9);
+            Console.WriteLine(BitConverter.ToString(result));
 
-            ReedSolomonDecoder decoder = new ReedSolomonDecoder(gf);
-            Console.WriteLine(decoder.Decode(input, 6));
-            foreach (int i in input)
-            {
-                Console.Write($"{i}, ");
-            }
-            Console.WriteLine();
+            ReedSolomonDecoder decoder = new(gf);
+            decoder.TryDecodeEx(result, 9, out var decodeResult);
+            Console.WriteLine(BitConverter.ToString(decodeResult));
         }
 
         static void PreambleBuild(int SampleRate, int SampleCount, float amplitude)
@@ -117,14 +106,19 @@ namespace Native_Modem
 
         static void SynchronousModemTest()
         {
+          
+
+            // Headers
             Protocol protocol = new Protocol(
                    preamble,
                    new SinusoidalSignal(1f, 2500f, 0f),
                    new SinusoidalSignal(1f, 2500f, 180f),
                    48000,
                    32,
-                   200,
+                   160,
                    0f);
+
+            // Drivers
             string driverName = SelectAsioDriver();
             Console.WriteLine("Do you want to configure the control panel? (y/n)");
             if (char.TryParse(Console.ReadLine(), out char c))
@@ -138,19 +132,23 @@ namespace Native_Modem
                     driver.ReleaseComAsioDriver();
                 }
             }
+
             //SynchronousModem modem = new SynchronousModem(protocol, driverName, null, "../../../receiverRecord.wav", "../../../syncPower.wav");
             SynchronousModem modem = new SynchronousModem(protocol, driverName, null, null, null);
-
+            
             //Start modem and prepare to write to file
             StreamWriter writer = new StreamWriter("../../../OUTPUT.txt");
             int frameCount = 0;
+
             modem.Start(array =>
             {
                 Console.Write($"Received frame {frameCount}:");
+                var Decoder = new Decoder();
+                array = Decoder.decodeToArray(array);
                 foreach (bool bit in array)
                 {
                     Console.Write(bit ? 1 : 0);
-                    writer.Write(bit ? 1 : 0); 
+                    writer.Write(bit ? 1 : 0);
                 }
                 Console.WriteLine();
                 frameCount++;
@@ -163,6 +161,9 @@ namespace Native_Modem
             StreamReader inputStream = new StreamReader("../../../INPUT.txt");
             BitArray bitArray = BitReader.ReadBits(inputStream);
             inputStream.Close();
+            Encoder encoder = new Encoder();
+            bitArray = encoder.encodeToIntArray(bitArray);
+            
             modem.Transport(bitArray);
 
             Console.WriteLine("Press enter to stop modem...");
