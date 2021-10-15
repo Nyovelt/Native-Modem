@@ -57,8 +57,13 @@ namespace Native_Modem
                 }
                 
                     
-                decoder.TryDecodeEx(data[i],9, out var decodeResult); // return True it will
-                data[i] = decodeResult;
+                var status = decoder.TryDecodeEx(data[i],9, out var decodeResult); // return True it will
+                Console.WriteLine(status);
+                if (status)
+                {
+                    data[i] = decodeResult;
+                }
+                
 
                 //if (i < 5)
                 //    Console.WriteLine(BitConverter.ToString(data[i]));

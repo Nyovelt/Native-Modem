@@ -12,6 +12,7 @@ namespace Native_Modem
 {
     class Program 
     {
+        static bool Crr = true;
         static float[] preamble;
         [STAThread]
         static void Main()
@@ -78,14 +79,15 @@ namespace Native_Modem
             iStream.Close();
             oStream.Close();
 
-            if (input.Length != output.Length)
+            //if (input.Length != output.Length)
+            if (false)
             {
                 Console.WriteLine($"Input and output have different length! In: {input.Length}, Out: {output.Length}");
             }
             else
             {
                 int sameCount = 0;
-                for (int i = 0; i < input.Length; i++)
+                for (int i = 0; i < 10000; i++)
                 {
                     if (input[i] == output[i])
                     {
@@ -143,8 +145,7 @@ namespace Native_Modem
             modem.Start(array =>
             {
                 Console.Write($"Received frame {frameCount}:");
-                var Decoder = new Decoder();
-                array = Decoder.decodeToArray(array);
+
                 foreach (bool bit in array)
                 {
                     Console.Write(bit ? 1 : 0);
@@ -161,8 +162,11 @@ namespace Native_Modem
             StreamReader inputStream = new StreamReader("../../../INPUT.txt");
             BitArray bitArray = BitReader.ReadBits(inputStream);
             inputStream.Close();
-            Encoder encoder = new Encoder();
-            bitArray = encoder.encodeToIntArray(bitArray);
+            if (Crr)
+            {
+                Encoder encoder = new Encoder();
+                bitArray = encoder.encodeToIntArray(bitArray);
+            }
             
             modem.Transport(bitArray);
 
@@ -173,6 +177,21 @@ namespace Native_Modem
             modem.Stop();
             writer.Close();
             modem.Dispose();
+            if (Crr)
+            {
+                StreamReader inputStream1 = new StreamReader("../../../OUTPUT.txt");
+                BitArray bitArray1 = BitReader.ReadBits(inputStream1);
+                inputStream1.Close();
+                var Decoder = new Decoder();
+                bitArray1 = Decoder.decodeToArray(bitArray1);
+                StreamWriter writer1 = new StreamWriter("../../../OUTPUT.txt");
+                foreach (bool bit in bitArray1)
+                {
+                    Console.Write(bit ? 1 : 0);
+                    writer1.Write(bit ? 1 : 0);
+                }
+                writer1.Close();
+            }
         }
 
         static void ModemTest()
