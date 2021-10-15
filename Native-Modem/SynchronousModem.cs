@@ -44,7 +44,7 @@ namespace Native_Modem
 
             frameSampleCount = protocol.Header.Length + protocol.FrameSize * protocol.SamplesPerBit;
             TxFIFO = new SampleFIFO(protocol.WaveFormat, frameSampleCount << 1, saveTransportTo);
-            RxFIFO = new SampleFIFO(protocol.WaveFormat, frameSampleCount, saveRecordTo);
+            RxFIFO = new SampleFIFO(protocol.WaveFormat, frameSampleCount << 1, saveRecordTo);
             modulateQueue = new Queue<BitArray>();
 
             asioOut = new AsioOut(driverName);
@@ -64,7 +64,7 @@ namespace Native_Modem
             modemState = ModemState.Running;
 
             _ = Modulate();
-            _ = Demodulate(onFrameReceived, 0.35f);
+            _ = Demodulate(onFrameReceived, 0.3f);
 
             asioOut.AudioAvailable += OnAsioOutAudioAvailable;
             asioOut.Play();
@@ -272,19 +272,14 @@ namespace Native_Modem
                         if (decodeFrame.Count == decodeFrame.Capacity)
                         {
                             bool[] bits = new bool[protocol.FrameSize];
+                            int index = 0;
                             for (int j = 0; j < protocol.FrameSize; j++)
                             {
-                                int index = j * protocol.SamplesPerBit;
-
-                                //int half = protocol.SamplesPerBit >> 1;
-                                //int quarter = half >> 1;
-                                //int end = half + quarter;
                                 float sum = 0f;
                                 for (int k = 0; k < protocol.SamplesPerBit; k++)
                                 {
-                                    sum += decodeFrame[index + k] * protocol.One[k];
+                                    sum += decodeFrame[index++] * protocol.One[k];
                                 }
-
                                 bits[j] = sum > protocol.Threshold;
                             }
 
