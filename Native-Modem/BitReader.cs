@@ -11,14 +11,6 @@ namespace Native_Modem
         {
             List<bool> bits = new List<bool>();
 
-            //  Hack: Add 100 zeros for heating 
-            //Random rd = new Random();
-            //for (var i=0;i < 300; ++i)
-            //{
-            //    bits.Add(rd.Next(0,2) == 0);
-            //}
-
-
             foreach (char c in stringStream.ReadLine())
             {
                 if (int.TryParse(c.ToString(), out int bit) && (bit == 0 || bit == 1))
@@ -31,6 +23,38 @@ namespace Native_Modem
                 }
             }
             return new BitArray(bits.ToArray());
+        }
+
+        public static byte[] ReadBitsIntoBytes(StreamReader stringStream)
+        {
+            List<byte> bytes = new List<byte>();
+
+            int bitCount = 0;
+            int byteData = 0;
+            foreach (char c in stringStream.ReadLine())
+            {
+                if (int.TryParse(c.ToString(), out int bit) && (bit == 0 || bit == 1))
+                {
+                    byteData |= bit << (bitCount++);
+                    if (bitCount == 8)
+                    {
+                        bytes.Add((byte)byteData);
+                        bitCount = 0;
+                        byteData = 0;
+                    }
+                }
+                else
+                {
+                    throw new Exception("bit stream parse error!");
+                }
+            }
+
+            if (bitCount != 0)
+            {
+                Console.WriteLine("bit stream cannot fit in bytes, padding with zeroes");
+                bytes.Add((byte)byteData);
+            }
+            return bytes.ToArray();
         }
     }
 }

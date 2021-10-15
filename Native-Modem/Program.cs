@@ -20,15 +20,14 @@ namespace Native_Modem
             GenerateRandomBits();
             //RecordAndPlay();
             PreambleBuild(48000, 480, 1);
-            //ModemTest(); // Remind: I have changed the PATH of sendRecord !!  
             SynchronousModemTest();
-            CompareResult();
+            //CompareResult();
             Console.ReadLine();
         }
 
         static void ReedSolomonTest()
         {
-            int[] input = new int[] { 0x48, 0x65, 0x6C, 0x6C, 0x6F, 0x20, 0x57, 0x6F, 0x72, 0x6C, 0x64, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+            int[] input = new int[] { 16, 1234, 432154 };
             foreach (int i in input)
             {
                 Console.Write($"{i}, ");
@@ -36,15 +35,20 @@ namespace Native_Modem
             Console.WriteLine();
             GenericGF gf = new GenericGF(285, 256, 1);
             ReedSolomonEncoder encoder = new ReedSolomonEncoder(gf);
-            encoder.Encode(input, 6);
+            encoder.Encode(input, 2);
             foreach (int i in input)
             {
                 Console.Write($"{i}, ");
             }
             Console.WriteLine();
-
+            input[1] = 97;
+            foreach (int i in input)
+            {
+                Console.Write($"{i}, ");
+            }
+            Console.WriteLine();
             ReedSolomonDecoder decoder = new ReedSolomonDecoder(gf);
-            Console.WriteLine(decoder.Decode(input, 6));
+            Console.WriteLine(decoder.Decode(input, 2));
             foreach (int i in input)
             {
                 Console.Write($"{i}, ");
@@ -108,13 +112,6 @@ namespace Native_Modem
             }
         }
 
-        static byte[] BitArrayToByteArray(BitArray bitArray)
-        {
-            byte[] result = new byte[(bitArray.Length - 1) >> 3 + 1];
-            bitArray.CopyTo(result, 0);
-            return result;
-        }
-
         static void SynchronousModemTest()
         {
             Protocol protocol = new Protocol(
@@ -123,8 +120,11 @@ namespace Native_Modem
                    new SinusoidalSignal(1f, 2500f, 180f),
                    48000,
                    32,
-                   200,
-                   0f);
+                   16,
+                   0f,
+                   new GenericGF(285, 256, 1),
+                   8,
+                   2);
             string driverName = SelectAsioDriver();
             Console.WriteLine("Do you want to configure the control panel? (y/n)");
             if (char.TryParse(Console.ReadLine(), out char c))
@@ -147,10 +147,14 @@ namespace Native_Modem
             modem.Start(array =>
             {
                 Console.Write($"Received frame {frameCount}:");
-                foreach (bool bit in array)
+                foreach (byte byteData in array)
                 {
-                    Console.Write(bit ? 1 : 0);
-                    writer.Write(bit ? 1 : 0); 
+                    for (int i = 0; i < 8; i++)
+                    {
+                        int bit = (byteData >> i) & 0x1;
+                        Console.Write(bit);
+                        writer.Write(bit);
+                    }
                 }
                 Console.WriteLine();
                 frameCount++;
@@ -161,9 +165,9 @@ namespace Native_Modem
 
             //Get input bits and transport
             StreamReader inputStream = new StreamReader("../../../INPUT.txt");
-            BitArray bitArray = BitReader.ReadBits(inputStream);
+            byte[] input = BitReader.ReadBitsIntoBytes(inputStream);
             inputStream.Close();
-            modem.Transport(bitArray);
+            modem.Transport(input);
 
             Console.WriteLine("Press enter to stop modem...");
             Console.ReadLine();
@@ -172,100 +176,6 @@ namespace Native_Modem
             modem.Stop();
             writer.Close();
             modem.Dispose();
-        }
-
-        static void ModemTest()
-        {
-            float[] header = new float[480];
-            for (int i = 0; i < 480; i++)
-            {
-                //header[i] = 0.5f * MathF.Sin(i / 480f * 2f * MathF.PI * 5000f);
-                header[i] = (float)preamble[i] * 1f;
-            }
-
-            Protocol protocol = new Protocol(
-                   header,
-                   new SinusoidalSignal(1f, 8000f, 0f),
-                   new SinusoidalSignal(1f, 8000f, 180f),
-                   48000,
-                   24,
-                   100,
-                   0f);
-            Modem modem = new Modem(protocol);
-
-            string driverName = SelectAsioDriver();
-            Console.WriteLine("Do you want to configure the control panel? (y/n)");
-            if (char.TryParse(Console.ReadLine(), out char c))
-            {
-                if (c == 'y')
-                {
-                    AsioDriver driver = AsioDriver.GetAsioDriverByName(driverName);
-                    driver.ControlPanel();
-                    Console.WriteLine("Press enter after setup the control panel");
-                    Console.ReadLine();
-                    driver.ReleaseComAsioDriver();
-                }
-            }
-            Recorder recorder = new Recorder(driverName);
-            recorder.SetupArgs(protocol.WaveFormat);
-
-            Console.WriteLine("Sender or Receiver? (s/r)");
-            if (char.TryParse(Console.ReadLine(), out char input))
-            {
-                switch (input)
-                {
-                    case 's':
-                        //Get input bits
-                        StreamReader inputStream = new StreamReader("../../../INPUT.txt");
-                        BitArray bitArray = BitReader.ReadBits(inputStream);
-                        inputStream.Close();
-
-                        //Modulate to samples
-                        SampleStream stream = modem.Modulate(bitArray);
-
-                        //Write to wav file
-                        WaveFileWriter writer = new WaveFileWriter("../../../sender.wav", protocol.WaveFormat);
-                        writer.WriteSamples(stream.Samples, 0, stream.Length);
-                        writer.Dispose();
-
-                        //Play and record
-                        recorder.StartRecordAndPlayback(recordPath: "../../../senderRecord.wav", playbackProvider: stream);
-                        Console.WriteLine("Press enter to stop sending...");
-                        Console.ReadLine();
-                        recorder.StopRecordAndPlayback();
-                        break;
-                    case 'r':
-                        //Get input file (lossless transfer)
-                        //AudioFileReader reader = new AudioFileReader("../../../senderRecord.wav");
-                        AudioFileReader reader = new AudioFileReader("../../../sender.wav");
-                        float[] buffer = new float[960000];
-                        int count = reader.Read(buffer, 0, 960000);
-                        float[] samples = new float[count];
-                        for (int i = 0; i < count; i++)
-                        {
-                            samples[i] = buffer[i];
-                        }
-                        reader.Close();
-
-                        //Demodulate
-                        int frames = 0;
-                        foreach (BitArray result in modem.Demodulate(new SampleStream(protocol.WaveFormat, samples), 3f))
-                        {
-                            for (int i = 0; i < result.Length; i++)
-                            {
-                                Console.Write(result[i] ? 1 : 0);
-                            }
-                            Console.WriteLine();
-                            frames++;
-                        }
-                        Console.WriteLine(frames);
-                        break;
-                    default:
-                        break;
-                }
-            }
-
-            recorder.Dispose();
         }
 
         static void GenerateRandomBits()

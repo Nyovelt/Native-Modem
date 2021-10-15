@@ -21,11 +21,14 @@ namespace Native_Modem
         readonly AsioOut asioOut;
         readonly SampleFIFO TxFIFO;
         readonly SampleFIFO RxFIFO;
-        readonly int frameSampleCount;
-        readonly Queue<BitArray> modulateQueue;
+        readonly Queue<byte[]> modulateQueue;
 
         readonly float[] buffer = new float[1024];
         readonly float[] preheater = new float[960];
+        readonly int[] lengthBuffer;
+        readonly int[] fullFrameBuffer;
+        readonly int[] lengthBufferRx;
+        readonly int[] fullFrameBufferRx;
 
         ModemState modemState;
         WaveFileWriter writer;
@@ -43,10 +46,13 @@ namespace Native_Modem
                 time += step;
             }
 
-            frameSampleCount = protocol.Header.Length + protocol.FrameSize * protocol.SamplesPerBit;
-            TxFIFO = new SampleFIFO(protocol.WaveFormat, frameSampleCount << 3, saveTransportTo);
-            RxFIFO = new SampleFIFO(protocol.WaveFormat, frameSampleCount << 1, saveRecordTo);
-            modulateQueue = new Queue<BitArray>();
+            TxFIFO = new SampleFIFO(protocol.WaveFormat, protocol.WaveFormat.SampleRate, saveTransportTo);
+            RxFIFO = new SampleFIFO(protocol.WaveFormat, protocol.WaveFormat.SampleRate >> 1, saveRecordTo);
+            modulateQueue = new Queue<byte[]>();
+            lengthBuffer = new int[1 + protocol.LengthRedundancyBytes];
+            fullFrameBuffer = new int[protocol.FrameMaxDataBytes + protocol.RedundancyBytes];
+            lengthBufferRx = new int[1 + protocol.LengthRedundancyBytes];
+            fullFrameBufferRx = new int[protocol.FrameMaxDataBytes + protocol.RedundancyBytes];
 
             asioOut = new AsioOut(driverName);
             SetupAsioOut();
@@ -60,7 +66,7 @@ namespace Native_Modem
             }
         }
 
-        public void Start(Action<BitArray> onFrameReceived)
+        public void Start(Action<byte[]> onFrameReceived)
         {
             if (modemState != ModemState.Idling)
             {
@@ -104,9 +110,9 @@ namespace Native_Modem
             }
         }
 
-        public void Transport(BitArray bitArray)
+        public void Transport(byte[] data)
         {
-            modulateQueue.Enqueue(bitArray);
+            modulateQueue.Enqueue(data);
         }
 
         void OnAsioOutAudioAvailable(object sender, AsioAudioAvailableEventArgs e)
@@ -142,19 +148,37 @@ namespace Native_Modem
             Console.WriteLine($"Choosing the output channel: {asioOut.AsioOutputChannelName(outChannel)}");
         }
 
-        void ModulateFrame(BitArray bitArray, int bitOffset)
+        void ModulateByte(int dataByte)
         {
-            int end = bitOffset + protocol.FrameSize;
-            for (int i = bitOffset; i < end; i++)
+            for (int j = 0; j < 8; j++)
             {
-                if (i >= bitArray.Length || !bitArray[i])
-                {
-                    TxFIFO.Push(protocol.Zero);
-                }
-                else
+                if ((dataByte & 0x1) == 1)
                 {
                     TxFIFO.Push(protocol.One);
                 }
+                else
+                {
+                    TxFIFO.Push(protocol.Zero);
+                }
+                dataByte >>= 1;
+            }
+        }
+
+        void ModulateFrame(int[] lengthWithECCInfo, int[] dataWithECCInfo)
+        {
+            // 1.Header: fixed size
+            TxFIFO.Push(protocol.Header);
+
+            // 2.DataLength and ECC: 8bits + 16bits
+            foreach (int data in lengthWithECCInfo)
+            {
+                ModulateByte(data);
+            }
+
+            // 3.Data and ECC: varying size (ECC size fixed)
+            foreach (int data in dataWithECCInfo)
+            {
+                ModulateByte(data);
             }
         }
 
@@ -164,7 +188,10 @@ namespace Native_Modem
             {
                 return;
             }
-            else if (modulateQueue.Count != 0)
+
+            ReedSolomonEncoder encoder = new ReedSolomonEncoder(protocol.GaloisField);
+
+            if (modulateQueue.Count != 0)
             {
                 if (!await TaskUtilities.WaitUntilUnless(() => TxFIFO.AvailableFor(preheater.Length), () => modemState != ModemState.Running))
                 {
@@ -189,38 +216,102 @@ namespace Native_Modem
                     TxFIFO.Push(preheater);
                 }
 
-                BitArray array = modulateQueue.Dequeue();
+                byte[] array = modulateQueue.Dequeue();
 
-                int frames = array.Count / protocol.FrameSize;
-                if (array.Count % protocol.FrameSize != 0)
+                int fullFrames = array.Length / protocol.FrameMaxDataBytes;
+                int byteCounter = 0;
+                lengthBuffer[0] = protocol.FrameMaxDataBytes;
+                encoder.Encode(lengthBuffer, protocol.LengthRedundancyBytes);
+                for (int i = 0; i < fullFrames; i++)
                 {
-                    frames++;
-                }
-
-                int bitCount = 0;
-                for (int i = 0; i < frames; i++)
-                {
-                    if (!await TaskUtilities.WaitUntilUnless(() => TxFIFO.AvailableFor(frameSampleCount), () => modemState != ModemState.Running))
+                    int j = 0;
+                    for (; j < protocol.FrameMaxDataBytes; j++)
+                    {
+                        fullFrameBuffer[j] = array[byteCounter++];
+                    }
+                    // May need to clear the paddings here
+                    encoder.Encode(fullFrameBuffer, protocol.RedundancyBytes);
+                    if (!await TaskUtilities.WaitUntilUnless(() => TxFIFO.AvailableFor(protocol.FullFrameSampleCount), () => modemState != ModemState.Running))
                     {
                         return;
                     }
-                    TxFIFO.Push(protocol.Header);
-                    ModulateFrame(array, bitCount);
-                    bitCount += protocol.FrameSize;
+                    ModulateFrame(lengthBuffer, fullFrameBuffer);
+                }
+
+                int remainBytes = array.Length - byteCounter;
+                lengthBuffer[0] = remainBytes;
+                encoder.Encode(lengthBuffer, protocol.LengthRedundancyBytes);
+                if (remainBytes != 0)
+                {
+                    int[] buffer = new int[remainBytes + protocol.RedundancyBytes];
+                    int i = 0;
+                    for (; i < remainBytes; i++)
+                    {
+                        buffer[i] = array[byteCounter++];
+                    }
+                    // May need to clear the paddings here
+                    encoder.Encode(buffer, protocol.RedundancyBytes);
+                    int sampleCount = protocol.Header.Length + protocol.SamplesPerByte * buffer.Length;
+                    if (!await TaskUtilities.WaitUntilUnless(() => TxFIFO.AvailableFor(protocol.FullFrameSampleCount), () => modemState != ModemState.Running))
+                    {
+                        return;
+                    }
+                    ModulateFrame(lengthBuffer, buffer);
                 }
             }
         }
 
-        const int DECODE_WAIT_SAMPLES = 200;
+        int DemodulateByte(List<float> samples, ref int offset)
+        {
+            int ret = 0;
+            for (int i = 0; i < 8; i++)
+            {
+                float sum = 0f;
+                for (int j = 0; j < protocol.SamplesPerBit; j++)
+                {
+                    sum += samples[offset++] * protocol.One[j];
+                }
+                ret |= (sum > protocol.Threshold ? 1 : 0) << i;
+            }
+            return ret;
+        }
+
+        void DemodulateBytes(List<float> samples, ref int offset, int byteCount, int[] output)
+        {
+            for (int i = 0; i < byteCount; i++)
+            {
+                int byteTemp = 0;
+                for (int j = 0; j < 8; j++)
+                {
+                    float sum = 0f;
+                    for (int k = 0; k < protocol.SamplesPerBit; k++)
+                    {
+                        sum += samples[offset++] * protocol.One[k];
+                    }
+                    byteTemp |= (sum > protocol.Threshold ? 1 : 0) << j;
+                }
+                output[i] = byteTemp;
+            }
+        }
+
+        const int DECODE_WAIT_SAMPLES = 400;
 
         enum DemodulateState
         {
             Sync,
-            Decode
+            DecodeLength,
+            DecodeData
         }
 
-        async Task Demodulate(Action<BitArray> onFrameReceived, float syncPowerThreshold)
+        async Task Demodulate(Action<byte[]> onFrameReceived, float syncPowerThreshold)
         {
+            if (modemState != ModemState.Running)
+            {
+                return;
+            }
+
+            ReedSolomonDecoder decoder = new ReedSolomonDecoder(protocol.GaloisField);
+
             bool decode = false;
             RingBuffer<float> syncBuffer = new RingBuffer<float>(protocol.Header.Length);
             for (int i = 0; i < protocol.Header.Length; i++)
@@ -230,9 +321,12 @@ namespace Native_Modem
             float syncPowerLocalMax = 0f;
             float minSyncPower = syncPowerThreshold * protocol.HeaderPower;
 
-            List<float> decodeFrame = new List<float>(protocol.FrameSize * protocol.SamplesPerBit);
+            List<float> decodeFrame = new List<float>(protocol.FullFrameSampleCount);
 
             DemodulateState state = DemodulateState.Sync;
+            int[] dataBytes = null;
+            int dataByteReceived = 0;
+            int decodeOffset = 0;
 
             while (true)
             {
@@ -266,7 +360,6 @@ namespace Native_Modem
                         }
                         if (syncPower > minSyncPower && syncPower > syncPowerLocalMax)
                         {
-                            //Console.WriteLine($"syncPower: {syncPower}, localMax: {syncPowerLocalMax}, threshold: {protocol.HeaderPower * syncPowerThreshold}");
                             syncPowerLocalMax = syncPower;
                             decode = true;
                             decodeFrame.Clear();
@@ -274,40 +367,73 @@ namespace Native_Modem
                         else if (decode)
                         {
                             decodeFrame.Add(sample);
-                            if (decodeFrame.Count > protocol.Header.Length)
+                            if (decodeFrame.Count > DECODE_WAIT_SAMPLES)
                             {
                                 syncPowerLocalMax = 0f;
-                                state = DemodulateState.Decode;
+                                state = DemodulateState.DecodeLength;
+                                decodeOffset = 0;
+                                decode = false;
                             }
                         }
                         break;
 
-                    case DemodulateState.Decode:
+                    case DemodulateState.DecodeLength:
                         if (writer != null)
                         {
                             writer.WriteSample(0f);
                         }
                         decodeFrame.Add(sample);
-                        if (decodeFrame.Count == decodeFrame.Capacity)
+                        if (decodeFrame.Count >= protocol.SamplesPerByte * (protocol.LengthRedundancyBytes + 1))
                         {
-                            bool[] bits = new bool[protocol.FrameSize];
-                            int index = 0;
-                            for (int j = 0; j < protocol.FrameSize; j++)
+                            DemodulateBytes(decodeFrame, ref decodeOffset, protocol.LengthRedundancyBytes + 1, lengthBufferRx);
+                            if (!decoder.Decode(lengthBufferRx, protocol.LengthRedundancyBytes) || lengthBufferRx[0] == 0)
                             {
-                                float sum = 0f;
-                                for (int k = 0; k < protocol.SamplesPerBit; k++)
-                                {
-                                    sum += decodeFrame[index++] * protocol.One[k];
-                                }
-                                bits[j] = sum > protocol.Threshold;
+                                //ECC fail, quit
+                                onFrameReceived.Invoke(null);
+                                state = DemodulateState.Sync;
+                                continue;
                             }
 
-                            // can add error correction / detection here
+                            if (lengthBufferRx[0] == protocol.FrameMaxDataBytes)
+                            {
+                                dataBytes = fullFrameBufferRx;
+                            }
+                            else
+                            {
+                                dataBytes = new int[lengthBufferRx[0] + protocol.RedundancyBytes];
+                            }
+                            dataByteReceived = 0;
+                            state = DemodulateState.DecodeData;
+                        }
+                        break;
 
-                            onFrameReceived.Invoke(new BitArray(bits));
+                    case DemodulateState.DecodeData:
+                        if (writer != null)
+                        {
+                            writer.WriteSample(0f);
+                        }
+                        decodeFrame.Add(sample);
+                        if (decodeFrame.Count >= decodeOffset + protocol.SamplesPerByte)
+                        {
+                            dataBytes[dataByteReceived++] = DemodulateByte(decodeFrame, ref decodeOffset);
+                            if (dataByteReceived == dataBytes.Length)
+                            {
+                                if (!decoder.Decode(dataBytes, protocol.RedundancyBytes))
+                                {
+                                    //ECC fail, quit
+                                    onFrameReceived.Invoke(null);
+                                    state = DemodulateState.Sync;
+                                    continue;
+                                }
 
-                            decode = false;
-                            state = DemodulateState.Sync;
+                                byte[] result = new byte[dataBytes.Length - protocol.RedundancyBytes];
+                                for (int i = 0; i < result.Length; i++)
+                                {
+                                    result[i] = (byte)dataBytes[i];
+                                }
+                                onFrameReceived.Invoke(result);
+                                state = DemodulateState.Sync;
+                            }
                         }
                         break;
 

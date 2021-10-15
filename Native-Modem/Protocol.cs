@@ -1,5 +1,6 @@
 ﻿using NAudio.Wave;
 using System;
+using STH1123.ReedSolomon;
 
 namespace Native_Modem
 {
@@ -12,10 +13,15 @@ namespace Native_Modem
         public float[] Zero { get; }
         public WaveFormat WaveFormat { get; }
         public int SamplesPerBit { get; }
-        public int FrameSize { get; }
+        public int SamplesPerByte { get; }
+        public int FrameMaxDataBytes { get; }
+        public int FullFrameSampleCount { get; }
         public float Threshold { get; }
+        public GenericGF GaloisField { get; }
+        public int RedundancyBytes { get; }
+        public int LengthRedundancyBytes { get; }
 
-        public Protocol(float[] header, SinusoidalSignal one, SinusoidalSignal zero, int sampleRate, int samplesPerBit, int frameSize, float threshold)
+        public Protocol(float[] header, SinusoidalSignal one, SinusoidalSignal zero, int sampleRate, int samplesPerBit, int maxFrameDataBytes, float threshold, GenericGF gf, int redundancyBytes, int lengthRedundancyBytes)
         {
             Header = header.Clone() as float[];
             HeaderPower = 0f;
@@ -27,7 +33,8 @@ namespace Native_Modem
             }
             WaveFormat = WaveFormat.CreateIeeeFloatWaveFormat(sampleRate, 1);
             SamplesPerBit = samplesPerBit;
-            FrameSize = frameSize;
+            SamplesPerByte = samplesPerBit << 3;
+            FrameMaxDataBytes = maxFrameDataBytes;
             Threshold = threshold;
 
             One = new float[samplesPerBit];
@@ -46,6 +53,11 @@ namespace Native_Modem
                 Zero[i] = zero.Evaluate(time);
                 time += timeStep;
             }
+
+            GaloisField = gf;
+            RedundancyBytes = redundancyBytes;
+            LengthRedundancyBytes = lengthRedundancyBytes;
+            FullFrameSampleCount = Header.Length + SamplesPerByte * (FrameMaxDataBytes + RedundancyBytes);
         }
     }
 }
