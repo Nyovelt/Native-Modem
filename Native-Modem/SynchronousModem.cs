@@ -28,8 +28,9 @@ namespace Native_Modem
         readonly float[] preheater = new float[760];
 
         ModemState modemState;
+        WaveFileWriter writer;
 
-        public SynchronousModem(Protocol protocol, string driverName, string saveTransportTo = null, string saveRecordTo = null)
+        public SynchronousModem(Protocol protocol, string driverName, string saveTransportTo = null, string saveRecordTo = null, string saveSyncPowerTo = null)
         {
             this.protocol = protocol;
 
@@ -52,6 +53,11 @@ namespace Native_Modem
             asioOut.InitRecordAndPlayback(TxFIFO.ToWaveProvider(), protocol.WaveFormat.Channels, protocol.WaveFormat.SampleRate);
 
             modemState = ModemState.Idling;
+            
+            if (!string.IsNullOrEmpty(saveSyncPowerTo))
+            {
+                writer = new WaveFileWriter(saveSyncPowerTo, protocol.WaveFormat);
+            }
         }
 
         public void Start(Action<BitArray> onFrameReceived)
@@ -92,6 +98,10 @@ namespace Native_Modem
             asioOut.Dispose();
             TxFIFO.Dispose();
             RxFIFO.Dispose();
+            if (writer != null)
+            {
+                writer.Dispose();
+            }
         }
 
         public void Transport(BitArray bitArray)
@@ -218,6 +228,7 @@ namespace Native_Modem
                 syncBuffer.Add(0f);
             }
             float syncPowerLocalMax = 0f;
+            float minSyncPower = syncPowerThreshold * protocol.HeaderPower;
 
             List<float> decodeFrame = new List<float>(protocol.FrameSize * protocol.SamplesPerBit);
 
@@ -249,7 +260,11 @@ namespace Native_Modem
                         {
                             syncPower *= protocol.HeaderMagnitude / magnitude;
                         }
-                        if (syncPower > protocol.HeaderPower * syncPowerThreshold && syncPower > syncPowerLocalMax)
+                        if (writer != null)
+                        {
+                            writer.WriteSample(syncPower / minSyncPower);
+                        }
+                        if (syncPower > minSyncPower && syncPower > syncPowerLocalMax)
                         {
                             Console.WriteLine($"syncPower: {syncPower}, localMax: {syncPowerLocalMax}, threshold: {protocol.HeaderPower * syncPowerThreshold}");
                             syncPowerLocalMax = syncPower;
@@ -268,6 +283,10 @@ namespace Native_Modem
                         break;
 
                     case DemodulateState.Decode:
+                        if (writer != null)
+                        {
+                            writer.WriteSample(0f);
+                        }
                         decodeFrame.Add(sample);
                         if (decodeFrame.Count == decodeFrame.Capacity)
                         {

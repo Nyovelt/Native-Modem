@@ -144,7 +144,7 @@ namespace Native_Modem
                     driver.ReleaseComAsioDriver();
                 }
             }
-            SynchronousModem modem = new SynchronousModem(protocol, driverName, "../../../transportRecord.wav", "../../../receiverRecord.wav");
+            SynchronousModem modem = new SynchronousModem(protocol, driverName, "../../../transportRecord.wav", "../../../receiverRecord.wav", "../../../syncPower.wav");
 
             //Start modem and prepare to write to file
             StreamWriter writer = new StreamWriter("../../../OUTPUT.txt");
