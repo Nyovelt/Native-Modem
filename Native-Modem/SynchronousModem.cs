@@ -70,7 +70,7 @@ namespace Native_Modem
             modemState = ModemState.Running;
 
             _ = Modulate();
-            _ = Demodulate(onFrameReceived, 0.3f);
+            _ = Demodulate(onFrameReceived, 0.10f);
 
             asioOut.AudioAvailable += OnAsioOutAudioAvailable;
             asioOut.Play();
@@ -266,7 +266,7 @@ namespace Native_Modem
                         }
                         if (syncPower > minSyncPower && syncPower > syncPowerLocalMax)
                         {
-                            Console.WriteLine($"syncPower: {syncPower}, localMax: {syncPowerLocalMax}, threshold: {protocol.HeaderPower * syncPowerThreshold}");
+                            //Console.WriteLine($"syncPower: {syncPower}, localMax: {syncPowerLocalMax}, threshold: {protocol.HeaderPower * syncPowerThreshold}");
                             syncPowerLocalMax = syncPower;
                             decode = true;
                             decodeFrame.Clear();

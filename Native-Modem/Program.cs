@@ -104,7 +104,7 @@ namespace Native_Modem
                     }
                 }
 
-                Console.WriteLine($"Correct bits: {sameCount} / {input.Length}, {(float)sameCount / input.Length}%");
+                Console.WriteLine($"Correct bits: {sameCount} / {input.Length}, {(float)sameCount / input.Length * 100f}%");
             }
         }
 
@@ -144,7 +144,7 @@ namespace Native_Modem
                     driver.ReleaseComAsioDriver();
                 }
             }
-            SynchronousModem modem = new SynchronousModem(protocol, driverName, "../../../transportRecord.wav", "../../../receiverRecord.wav", "../../../syncPower.wav");
+            SynchronousModem modem = new SynchronousModem(protocol, driverName, null, "../../../receiverRecord.wav", "../../../syncPower.wav");
 
             //Start modem and prepare to write to file
             StreamWriter writer = new StreamWriter("../../../OUTPUT.txt");
