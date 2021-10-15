@@ -25,7 +25,7 @@ namespace Native_Modem
         readonly Queue<BitArray> modulateQueue;
 
         readonly float[] buffer = new float[1024];
-        readonly float[] preheater = new float[760];
+        readonly float[] preheater = new float[960];
 
         ModemState modemState;
         WaveFileWriter writer;
@@ -44,7 +44,7 @@ namespace Native_Modem
             }
 
             frameSampleCount = protocol.Header.Length + protocol.FrameSize * protocol.SamplesPerBit;
-            TxFIFO = new SampleFIFO(protocol.WaveFormat, frameSampleCount << 1, saveTransportTo);
+            TxFIFO = new SampleFIFO(protocol.WaveFormat, frameSampleCount << 3, saveTransportTo);
             RxFIFO = new SampleFIFO(protocol.WaveFormat, frameSampleCount << 1, saveRecordTo);
             modulateQueue = new Queue<BitArray>();
 
@@ -70,7 +70,7 @@ namespace Native_Modem
             modemState = ModemState.Running;
 
             _ = Modulate();
-            _ = Demodulate(onFrameReceived, 0.10f);
+            _ = Demodulate(onFrameReceived, 0.20f);
 
             asioOut.AudioAvailable += OnAsioOutAudioAvailable;
             asioOut.Play();
@@ -274,7 +274,7 @@ namespace Native_Modem
                         else if (decode)
                         {
                             decodeFrame.Add(sample);
-                            if (decodeFrame.Count > DECODE_WAIT_SAMPLES)
+                            if (decodeFrame.Count > protocol.Header.Length)
                             {
                                 syncPowerLocalMax = 0f;
                                 state = DemodulateState.Decode;

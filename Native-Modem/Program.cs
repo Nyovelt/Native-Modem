@@ -17,7 +17,7 @@ namespace Native_Modem
         static void Main()
         {
             //ReedSolomonTest();
-            //GenerateRandomBits();
+            GenerateRandomBits();
             //RecordAndPlay();
             PreambleBuild(48000, 480, 1);
             //ModemTest(); // Remind: I have changed the PATH of sendRecord !!  
@@ -58,8 +58,8 @@ namespace Native_Modem
             Debug.Assert(SampleRate != 0);
             preamble = new float[SampleCount];
 
-            const float frequencyMin = 2000f;
-            const float frequencyMax = 10000f;
+            const float frequencyMin = 1000f;
+            const float frequencyMax = 4000f;
             int half = SampleCount >> 1;
             float frequencyStep = (frequencyMax - frequencyMin) / SampleCount * 2f;
             float timeStep = 1f / SampleRate;
@@ -117,19 +117,13 @@ namespace Native_Modem
 
         static void SynchronousModemTest()
         {
-            float[] header = new float[480];
-            for (int i = 0; i < 480; i++)
-            {
-                header[i] = preamble[i] * 1f;
-            }
-
             Protocol protocol = new Protocol(
-                   header,
-                   new SinusoidalSignal(1f, 2000f, 0f),
-                   new SinusoidalSignal(1f, 2000f, 180f),
+                   preamble,
+                   new SinusoidalSignal(1f, 2500f, 0f),
+                   new SinusoidalSignal(1f, 2500f, 180f),
                    48000,
-                   24,
-                   100,
+                   32,
+                   200,
                    0f);
             string driverName = SelectAsioDriver();
             Console.WriteLine("Do you want to configure the control panel? (y/n)");
@@ -144,7 +138,8 @@ namespace Native_Modem
                     driver.ReleaseComAsioDriver();
                 }
             }
-            SynchronousModem modem = new SynchronousModem(protocol, driverName, null, "../../../receiverRecord.wav", "../../../syncPower.wav");
+            //SynchronousModem modem = new SynchronousModem(protocol, driverName, null, "../../../receiverRecord.wav", "../../../syncPower.wav");
+            SynchronousModem modem = new SynchronousModem(protocol, driverName, null, null, null);
 
             //Start modem and prepare to write to file
             StreamWriter writer = new StreamWriter("../../../OUTPUT.txt");

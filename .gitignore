@@ -389,3 +389,4 @@ FodyWeavers.xsd
 *.wav
 *.pkf
 Native-Modem/OUTPUT.txt
+Native-Modem/INPUT.txt
