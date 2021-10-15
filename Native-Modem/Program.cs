@@ -166,7 +166,10 @@ namespace Native_Modem
             
             modem.Transport(bitArray);
 
-            Console.WriteLine("Press enter to stop modem...");
+            Console.WriteLine("Press enter to start another modem...");
+
+            modem.Transport(bitArray);
+            Console.WriteLine("Press enter to stop  modem...");
             Console.ReadLine();
             Console.WriteLine($"Received {frameCount} frames in total.");
 
