@@ -19,11 +19,12 @@ namespace Native_Modem
         {
             Header = header.Clone() as float[];
             HeaderPower = 0f;
+            HeaderMagnitude = 0f;
             foreach (float sample in header)
             {
                 HeaderPower += sample * sample;
+                HeaderMagnitude = MathF.Max(HeaderMagnitude, MathF.Abs(sample));
             }
-            HeaderMagnitude = MathF.Sqrt(HeaderPower);
             WaveFormat = WaveFormat.CreateIeeeFloatWaveFormat(sampleRate, 1);
             SamplesPerBit = samplesPerBit;
             FrameSize = frameSize;

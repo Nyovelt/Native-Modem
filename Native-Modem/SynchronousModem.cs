@@ -212,12 +212,6 @@ namespace Native_Modem
         async Task Demodulate(Action<BitArray> onFrameReceived, float syncPowerThreshold)
         {
             bool decode = false;
-            RingBuffer<float> powerBuffer = new RingBuffer<float>(protocol.Header.Length);
-            for (int i = 0; i < protocol.Header.Length; i++)
-            {
-                powerBuffer.Add(0f);
-            }
-            float powerSum = 0f;
             RingBuffer<float> syncBuffer = new RingBuffer<float>(protocol.Header.Length);
             for (int i = 0; i < protocol.Header.Length; i++)
             {
@@ -237,10 +231,6 @@ namespace Native_Modem
                 }
 
                 float sample = RxFIFO.Pop();
-                powerSum -= powerBuffer.ReadAndRemoveNext();
-                float temp = sample * sample;
-                powerSum += temp;
-                powerBuffer.Add(temp);
 
                 syncBuffer.ReadAndRemoveNext();
                 syncBuffer.Add(sample);
@@ -249,12 +239,16 @@ namespace Native_Modem
                 {
                     case DemodulateState.Sync:
                         float syncPower = 0f;
-                        float gain = protocol.HeaderMagnitude / MathF.Sqrt(powerSum);
+                        float magnitude = 0f;
                         for (int j = 0; j < protocol.Header.Length; j++)
                         {
+                            magnitude = MathF.Max(magnitude, MathF.Abs(syncBuffer[j]));
                             syncPower += syncBuffer[j] * protocol.Header[j];
                         }
-                        syncPower *= gain;
+                        if (magnitude > 0.01f)
+                        {
+                            syncPower *= protocol.HeaderMagnitude / magnitude;
+                        }
                         if (syncPower > protocol.HeaderPower * syncPowerThreshold && syncPower > syncPowerLocalMax)
                         {
                             Console.WriteLine($"syncPower: {syncPower}, localMax: {syncPowerLocalMax}, threshold: {protocol.HeaderPower * syncPowerThreshold}");
@@ -268,10 +262,6 @@ namespace Native_Modem
                             if (decodeFrame.Count > DECODE_WAIT_SAMPLES)
                             {
                                 syncPowerLocalMax = 0f;
-                                for (int j = 0; j < protocol.Header.Length; j++)
-                                {
-                                    syncBuffer.Add(0f);
-                                }
                                 state = DemodulateState.Decode;
                             }
                         }
