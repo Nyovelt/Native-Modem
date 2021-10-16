@@ -7,12 +7,12 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Diagnostics;
 using STH1123.ReedSolomon;
-
+using System.Threading;
 namespace Native_Modem
 {
     class Program 
     {
-        static bool Crr = true;
+        static bool Crr = false;
         static float[] preamble;
         [STAThread]
         static void Main()
@@ -170,8 +170,8 @@ namespace Native_Modem
             
             modem.Transport(bitArray);
 
-            Console.WriteLine("Press enter to start another modem...");
-
+            //Console.WriteLine("Press enter to start another modem...");
+            Thread.Sleep(18000);
             modem.Transport(bitArray);
             Console.WriteLine("Press enter to stop  modem...");
             Console.ReadLine();

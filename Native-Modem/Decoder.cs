@@ -62,6 +62,7 @@ namespace Native_Modem
                 if (status)
                 {
                     data[i] = decodeResult;
+                    Correct[i] = true;
                 }
                 
 
@@ -69,34 +70,48 @@ namespace Native_Modem
                 //    Console.WriteLine(BitConverter.ToString(data[i]));
                
             }
-
+            bitArray_index = 20800;
             for (var i = 0; i < 130; ++i)
             {
-
-                for (var j = 0; j < 20; ++j)
+                if (Correct[i])
                 {
-                    int have_even_0 = 0;
-
-                    for (var k = 0; k < 7; ++k)
-                    {
-                        data[i][j] += (byte)(bitArray[bitArray_index] ? 1 : 0);
-                        have_even_0 += bitArray[bitArray_index] == false ? 1 : 0;
-                        bitArray_index++;
-                        data[i][j] <<= 1;
-                    }
-                    data[i][j] += (byte)(bitArray[bitArray_index] ? 1 : 0);
-                    if (((((have_even_0 % 2) == 1) ? true : false) != bitArray[bitArray_index]) && (j < 11))
-                    {
-                        data[i][j] = 0; // See source code, equals to tell where it's wrong
-                    }
-                    bitArray_index++;
-                    //Console.Write($" {data[i][j]} ");
+                    bitArray_index += 160;
                 }
+                else
+                {
+                    for (var j = 0; j < 20; ++j)
+                    {
+                        int have_even_0 = 0;
+
+                        for (var k = 0; k < 7; ++k)
+                        {
+                            if (bitArray_index > bitArray.Count)
+                            {
+                                continue;
+                            }
+                            data[i][j] += (byte)(bitArray[bitArray_index] ? 1 : 0);
+                            have_even_0 += bitArray[bitArray_index] == false ? 1 : 0;
+                            bitArray_index++;
+                            data[i][j] <<= 1;
+                        }
+                        data[i][j] += (byte)(bitArray[bitArray_index] ? 1 : 0);
+                        if (((((have_even_0 % 2) == 1) ? true : false) != bitArray[bitArray_index]) && (j < 11))
+                        {
+                            data[i][j] = 0; // See source code, equals to tell where it's wrong
+                        }
+                        bitArray_index++;
+                        //Console.Write($" {data[i][j]} ");
+                    }
 
 
-                decoder.TryDecodeEx(data[i], 9, out var decodeResult); // return True it will
-                data[i] = decodeResult;
-
+                    var status = decoder.TryDecodeEx(data[i], 9, out var decodeResult); // return True it will
+                    Console.WriteLine(status);
+                    if (status)
+                    {
+                        data[i] = decodeResult;
+                        Correct[i] = true;
+                    }
+                }
                 //if (i < 5)
                 //    Console.WriteLine(BitConverter.ToString(data[i]));
 
