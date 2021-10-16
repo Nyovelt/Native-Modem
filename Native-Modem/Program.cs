@@ -12,7 +12,7 @@ namespace Native_Modem
 {
     class Program 
     {
-        static bool Crr = false;
+        static bool Crr = true;
         static float[] preamble;
         [STAThread]
         static void Main()
