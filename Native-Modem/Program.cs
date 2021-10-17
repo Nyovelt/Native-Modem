@@ -12,7 +12,7 @@ namespace Native_Modem
 {
     class Program 
     {
-        static bool Crr = true;
+        static bool Crr = false;
         static float[] preamble;
         [STAThread]
         static void Main()
@@ -117,7 +117,7 @@ namespace Native_Modem
                    new SinusoidalSignal(1f, 2500f, 180f),
                    48000,
                    32,
-                   160,
+                   Crr ? 160 : 200,
                    0f);
 
             // Drivers
@@ -170,9 +170,12 @@ namespace Native_Modem
             
             modem.Transport(bitArray);
 
-            //Console.WriteLine("Press enter to start another modem...");
-            Thread.Sleep(18000);
-            modem.Transport(bitArray);
+            if (Crr)
+            {
+                //Console.WriteLine("Press enter to start another modem...");
+                Thread.Sleep(18000);
+                modem.Transport(bitArray);
+            }
             Console.WriteLine("Press enter to stop  modem...");
             Console.ReadLine();
             Console.WriteLine($"Received {frameCount} frames in total.");
