@@ -152,7 +152,7 @@ namespace Native_Modem
         {
             for (int j = 0; j < 8; j++)
             {
-                if ((dataByte & 0x1) == 1)
+                if (((dataByte >> j) & 0x1) == 1)
                 {
                     TxFIFO.Push(protocol.One);
                 }
@@ -160,7 +160,6 @@ namespace Native_Modem
                 {
                     TxFIFO.Push(protocol.Zero);
                 }
-                dataByte >>= 1;
             }
         }
 
@@ -267,14 +266,17 @@ namespace Native_Modem
                 {
                     sum += samples[offset++] * protocol.One[j];
                 }
-                ret |= (sum > protocol.Threshold ? 1 : 0) << i;
+                if (sum > protocol.Threshold)
+                {
+                    ret |= 0x1 << i;
+                }
             }
             return ret;
         }
 
-        void DemodulateBytes(List<float> samples, ref int offset, int byteCount, int[] output)
+        void DemodulateBytes(List<float> samples, ref int offset, int[] output)
         {
-            for (int i = 0; i < byteCount; i++)
+            for (int i = 0; i < output.Length; i++)
             {
                 int byteTemp = 0;
                 for (int j = 0; j < 8; j++)
@@ -360,7 +362,7 @@ namespace Native_Modem
                         powerDisplayCount++;
                         if (powerDisplayCount >= POWER_DISPLAY_INTERVAL)
                         {
-                            Console.Write($"Current sync power: {(maxPower / minSyncPower * 100f).ToString("000.0000")}%\r");
+                            Console.Write($"Current sync power: {maxPower / minSyncPower * 100f:000.000}%\r");
                             powerDisplayCount = 0;
                             maxPower = 0f;
                         }
@@ -379,6 +381,7 @@ namespace Native_Modem
                             decodeFrame.Add(sample);
                             if (decodeFrame.Count > DECODE_WAIT_SAMPLES)
                             {
+                                Console.WriteLine($"Frame detected! sync power: {syncPowerLocalMax / minSyncPower * 100f}%");
                                 syncPowerLocalMax = 0f;
                                 state = DemodulateState.DecodeLength;
                                 decodeOffset = 0;
@@ -395,7 +398,7 @@ namespace Native_Modem
                         decodeFrame.Add(sample);
                         if (decodeFrame.Count >= protocol.SamplesPerByte * (protocol.LengthRedundancyBytes + 1))
                         {
-                            DemodulateBytes(decodeFrame, ref decodeOffset, protocol.LengthRedundancyBytes + 1, lengthBufferRx);
+                            DemodulateBytes(decodeFrame, ref decodeOffset, lengthBufferRx);
                             if (!decoder.Decode(lengthBufferRx, protocol.LengthRedundancyBytes) || lengthBufferRx[0] == 0)
                             {
                                 //ECC fail, quit
@@ -406,7 +409,7 @@ namespace Native_Modem
                                 Console.WriteLine("Length decode error!");
                                 onFrameReceived.Invoke(null);
                                 state = DemodulateState.Sync;
-                                continue;
+                                break;
                             }
                             else
                             {
@@ -443,7 +446,7 @@ namespace Native_Modem
                                     Console.WriteLine("Data decode error!");
                                     onFrameReceived.Invoke(null);
                                     state = DemodulateState.Sync;
-                                    continue;
+                                    break;
                                 }
 
                                 byte[] result = new byte[dataBytes.Length - protocol.RedundancyBytes];

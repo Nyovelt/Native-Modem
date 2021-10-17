@@ -19,9 +19,9 @@ namespace Native_Modem
             //ReedSolomonTest();
             GenerateRandomBits();
             //RecordAndPlay();
-            PreambleBuild(48000, 480, 1);
+            PreambleBuild(48000, 960, 1);
             SynchronousModemTest();
-            //CompareResult();
+            CompareResult();
             Console.ReadLine();
         }
 
@@ -63,7 +63,7 @@ namespace Native_Modem
             preamble = new float[SampleCount];
 
             const float frequencyMin = 1000f;
-            const float frequencyMax = 4000f;
+            const float frequencyMax = 10000f;
             int half = SampleCount >> 1;
             float frequencyStep = (frequencyMax - frequencyMin) / SampleCount * 2f;
             float timeStep = 1f / SampleRate;
@@ -116,14 +116,14 @@ namespace Native_Modem
         {
             Protocol protocol = new Protocol(
                    preamble,
-                   new SinusoidalSignal(1f, 2500f, 0f),
-                   new SinusoidalSignal(1f, 2500f, 180f),
+                   new SinusoidalSignal(1f, 4000f, 0f),
+                   new SinusoidalSignal(1f, 4000f, 180f),
                    48000,
-                   32,
-                   16,
+                   24,
+                   11,
                    0f,
                    new GenericGF(285, 256, 1),
-                   8,
+                   9,
                    2);
             string driverName = SelectAsioDriver();
             Console.WriteLine("Do you want to configure the control panel? (y/n)");
@@ -138,15 +138,15 @@ namespace Native_Modem
                     driver.ReleaseComAsioDriver();
                 }
             }
-            //SynchronousModem modem = new SynchronousModem(protocol, driverName, null, "../../../receiverRecord.wav", "../../../syncPower.wav");
-            SynchronousModem modem = new SynchronousModem(protocol, driverName, null, null, null);
+            //SynchronousModem modem = new SynchronousModem(protocol, driverName, "../../../transportRecord.wav", "../../../receiverRecord.wav", "../../../syncPower.wav");
+            SynchronousModem modem = new SynchronousModem(protocol, driverName);
 
             //Start modem and prepare to write to file
             StreamWriter writer = new StreamWriter("../../../OUTPUT.txt");
             int frameCount = 0;
             modem.Start(array =>
             {
-                Console.Write($"Received frame {frameCount}:");
+                Console.Write($"Received frame {frameCount}: ");
                 if (array == null)
                 {
                     Console.Write("Failed to receive!");

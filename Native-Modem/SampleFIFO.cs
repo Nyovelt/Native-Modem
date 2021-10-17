@@ -1,5 +1,6 @@
 ﻿using B83.Collections;
 using NAudio.Wave;
+using System;
 
 namespace Native_Modem
 {
@@ -71,6 +72,10 @@ namespace Native_Modem
 
         public int Read(float[] buffer, int offset, int count)
         {
+            if (ringBuffer.Count != 0 && ringBuffer.Count < count)
+            {
+                Console.WriteLine("TxFIFO not fed enough!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+            }
             int c = 0;
             for (; c < count; c++)
             {
