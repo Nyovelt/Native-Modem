@@ -70,7 +70,7 @@ namespace Native_Modem
             modemState = ModemState.Running;
 
             _ = Modulate();
-            _ = Demodulate(onFrameReceived, 0.20f);
+            _ = Demodulate(onFrameReceived, 0.30f);
 
             asioOut.AudioAvailable += OnAsioOutAudioAvailable;
             asioOut.Play();
@@ -212,6 +212,7 @@ namespace Native_Modem
         }
 
         const int DECODE_WAIT_SAMPLES = 200;
+        const int POWER_DISPLAY_INTERVAL = 2400;
 
         enum DemodulateState
         {
@@ -236,6 +237,10 @@ namespace Native_Modem
             List<float> decodeFrame = new List<float>(protocol.FrameSize * protocol.SamplesPerBit);
 
             DemodulateState state = DemodulateState.Sync;
+
+            int powerDisplayCounter = 0;
+            float powerMax = 0f;
+            float localMax = 0f;
 
             while (true)
             {
@@ -263,6 +268,15 @@ namespace Native_Modem
                         {
                             syncPower *= protocol.HeaderMagnitude / magnitude;
                         }
+                        powerMax = MathF.Max(powerMax, syncPower);
+                        powerDisplayCounter++;
+                        if (powerDisplayCounter >= POWER_DISPLAY_INTERVAL)
+                        {
+                            localMax = MathF.Max(localMax, powerMax);
+                            Console.Write($"Current sync power: {powerMax / minSyncPower * 100f:000.000}%, Local max: {localMax / minSyncPower * 100f:000.000}%\r");
+                            powerDisplayCounter = 0;
+                            powerMax = 0f;
+                        }
                         if (writer != null)
                         {
                             writer.WriteSample(syncPower / minSyncPower);
@@ -279,6 +293,8 @@ namespace Native_Modem
                             decodeFrame.Add(sample);
                             if (decodeFrame.Count > protocol.Header.Length)
                             {
+                                localMax = 0f;
+                                Console.WriteLine($"Frame detected! sync power: {syncPowerLocalMax / minSyncPower * 100f}%                                 ");
                                 syncPowerLocalMax = 0f;
                                 state = DemodulateState.Decode;
                             }
