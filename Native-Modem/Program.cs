@@ -147,13 +147,20 @@ namespace Native_Modem
             modem.Start(array =>
             {
                 Console.Write($"Received frame {frameCount}:");
-                foreach (byte byteData in array)
+                if (array == null)
                 {
-                    for (int i = 0; i < 8; i++)
+                    Console.Write("Failed to receive!");
+                }
+                else
+                {
+                    foreach (byte byteData in array)
                     {
-                        int bit = (byteData >> i) & 0x1;
-                        Console.Write(bit);
-                        writer.Write(bit);
+                        for (int i = 0; i < 8; i++)
+                        {
+                            int bit = (byteData >> i) & 0x1;
+                            Console.Write(bit);
+                            writer.Write(bit);
+                        }
                     }
                 }
                 Console.WriteLine();

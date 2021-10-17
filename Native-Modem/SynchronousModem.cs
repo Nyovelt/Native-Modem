@@ -224,12 +224,10 @@ namespace Native_Modem
                 encoder.Encode(lengthBuffer, protocol.LengthRedundancyBytes);
                 for (int i = 0; i < fullFrames; i++)
                 {
-                    int j = 0;
-                    for (; j < protocol.FrameMaxDataBytes; j++)
+                    for (int j = 0; j < protocol.FrameMaxDataBytes; j++)
                     {
                         fullFrameBuffer[j] = array[byteCounter++];
                     }
-                    // May need to clear the paddings here
                     encoder.Encode(fullFrameBuffer, protocol.RedundancyBytes);
                     if (!await TaskUtilities.WaitUntilUnless(() => TxFIFO.AvailableFor(protocol.FullFrameSampleCount), () => modemState != ModemState.Running))
                     {
@@ -244,12 +242,10 @@ namespace Native_Modem
                 if (remainBytes != 0)
                 {
                     int[] buffer = new int[remainBytes + protocol.RedundancyBytes];
-                    int i = 0;
-                    for (; i < remainBytes; i++)
+                    for (int i = 0; i < remainBytes; i++)
                     {
                         buffer[i] = array[byteCounter++];
                     }
-                    // May need to clear the paddings here
                     encoder.Encode(buffer, protocol.RedundancyBytes);
                     int sampleCount = protocol.Header.Length + protocol.SamplesPerByte * buffer.Length;
                     if (!await TaskUtilities.WaitUntilUnless(() => TxFIFO.AvailableFor(protocol.FullFrameSampleCount), () => modemState != ModemState.Running))
@@ -288,13 +284,17 @@ namespace Native_Modem
                     {
                         sum += samples[offset++] * protocol.One[k];
                     }
-                    byteTemp |= (sum > protocol.Threshold ? 1 : 0) << j;
+                    if (sum > protocol.Threshold)
+                    {
+                        byteTemp |= 0x1 << j;
+                    }
                 }
                 output[i] = byteTemp;
             }
         }
 
         const int DECODE_WAIT_SAMPLES = 400;
+        const int POWER_DISPLAY_INTERVAL = 2400;
 
         enum DemodulateState
         {
@@ -327,6 +327,8 @@ namespace Native_Modem
             int[] dataBytes = null;
             int dataByteReceived = 0;
             int decodeOffset = 0;
+            int powerDisplayCount = 0;
+            float maxPower = 0f;
 
             while (true)
             {
@@ -353,6 +355,14 @@ namespace Native_Modem
                         if (magnitude > 0.01f)
                         {
                             syncPower *= protocol.HeaderMagnitude / magnitude;
+                        }
+                        maxPower = MathF.Max(maxPower, syncPower);
+                        powerDisplayCount++;
+                        if (powerDisplayCount >= POWER_DISPLAY_INTERVAL)
+                        {
+                            Console.Write($"Current sync power: {(maxPower / minSyncPower * 100f).ToString("000.0000")}%\r");
+                            powerDisplayCount = 0;
+                            maxPower = 0f;
                         }
                         if (writer != null)
                         {
@@ -389,9 +399,18 @@ namespace Native_Modem
                             if (!decoder.Decode(lengthBufferRx, protocol.LengthRedundancyBytes) || lengthBufferRx[0] == 0)
                             {
                                 //ECC fail, quit
+                                foreach (int data in lengthBufferRx)
+                                {
+                                    Console.Write($"{data}, ");
+                                }
+                                Console.WriteLine("Length decode error!");
                                 onFrameReceived.Invoke(null);
                                 state = DemodulateState.Sync;
                                 continue;
+                            }
+                            else
+                            {
+                                Console.WriteLine($"Length decode success, length: {lengthBufferRx[0]}");
                             }
 
                             if (lengthBufferRx[0] == protocol.FrameMaxDataBytes)
@@ -421,6 +440,7 @@ namespace Native_Modem
                                 if (!decoder.Decode(dataBytes, protocol.RedundancyBytes))
                                 {
                                     //ECC fail, quit
+                                    Console.WriteLine("Data decode error!");
                                     onFrameReceived.Invoke(null);
                                     state = DemodulateState.Sync;
                                     continue;
