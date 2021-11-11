@@ -70,7 +70,7 @@ namespace Native_Modem
             modemState = ModemState.Running;
 
             _ = Modulate();
-            _ = Demodulate(onFrameReceived, 0.30f);
+            //_ = Demodulate(onFrameReceived, 0.30f);
 
             asioOut.AudioAvailable += OnAsioOutAudioAvailable;
             asioOut.Play();
@@ -116,7 +116,7 @@ namespace Native_Modem
             {
                 Console.WriteLine("RxFIFO overflow!!!!!");
             }
-            RxFIFO.Push(buffer, sampleCount);
+            //RxFIFO.Push(buffer, sampleCount);
         }
 
         void SetupAsioOut()

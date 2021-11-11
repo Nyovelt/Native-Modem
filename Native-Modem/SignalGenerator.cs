@@ -10,7 +10,7 @@ namespace Native_Modem
         readonly SinusoidalSignal[] signals;
         readonly float gain;
 
-        int sampleCount = 0;
+        float time = 0;
 
         public SignalGenerator(SinusoidalSignal[] signals, WaveFormat waveFormat, float gain = 1f)
         {
@@ -23,7 +23,6 @@ namespace Native_Modem
 
         public int Read(float[] buffer, int offset, int count)
         {
-            float time = sampleCount / waveFormat.SampleRate;
             float step = 1f / waveFormat.SampleRate;
             for (int i = 0; i < count; i++)
             {
@@ -38,7 +37,6 @@ namespace Native_Modem
                 time += step;
             }
 
-            sampleCount += count;
             return count;
         }
     }

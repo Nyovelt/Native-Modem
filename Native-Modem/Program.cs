@@ -12,7 +12,7 @@ namespace Native_Modem
 {
     class Program 
     {
-        static bool Crr = false;
+        static bool Crr = true;
         static float[] preamble;
         [STAThread]
         static void Main()
@@ -24,7 +24,7 @@ namespace Native_Modem
             PreambleBuild(48000, 480, 1);
             //ModemTest(); // Remind: I have changed the PATH of sendRecord !!  
             SynchronousModemTest();
-            CompareResult();
+            //CompareResult();
             Console.ReadLine();
         }
 
@@ -328,8 +328,8 @@ namespace Native_Modem
             recorder.SetupArgs(recordFormat);
 
             SignalGenerator signal = new SignalGenerator(new SinusoidalSignal[] {
-                new SinusoidalSignal(1f, 1000f), new SinusoidalSignal(1f, 10000f) },
-                signalFormat, 0.02f);
+                new SinusoidalSignal(1.0f, 1000f), new SinusoidalSignal(1.0f, 10000f) },
+                signalFormat, 0.5f);
             if (!recorder.StartRecordAndPlayback(recordPath: "../../../record.wav", playbackProvider: signal))
             {
                 Console.WriteLine("Start record and playback failed!");
