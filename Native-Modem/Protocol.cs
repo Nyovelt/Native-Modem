@@ -1,63 +1,62 @@
 ﻿using NAudio.Wave;
-using System;
-using STH1123.ReedSolomon;
+using System.Collections;
 
 namespace Native_Modem
 {
+    /// <summary>
+    /// Frame: [ preamble (32bits) | 
+    /// dest_addr (8bits) | 
+    /// src_addr (8bits) | 
+    /// type (8bits) | 
+    /// length (8bits) | 
+    /// payload (variable) | 
+    /// crc32 (32bits) ]
+    /// </summary>
     public class Protocol
     {
-        public float[] Header { get; }
-        public float HeaderPower { get; }
-        public float HeaderMagnitude { get; }
-        public float[] One { get; }
-        public float[] Zero { get; }
+        public enum Type
+        {
+            DATA = 0xAA,
+            ACKNOWLEDGEMENT = 0xAB,
+            MACPING_REQ = 0xAC,
+            MACPING_REPLY = 0xAD
+        }
+
+        public BitArray Preamble { get; }
+        public int IPGBits { get; }
+        public float[] ClockSync { get; }
+        public float ClockSyncPower { get; }
+        public byte SFDByte { get; }
+        public float Amplitude { get; }
         public WaveFormat WaveFormat { get; }
         public int SamplesPerBit { get; }
         public int SamplesPerByte { get; }
-        public int FrameMaxDataBytes { get; }
-        public int FullFrameSampleCount { get; }
-        public float Threshold { get; }
-        public GenericGF GaloisField { get; }
-        public int RedundancyBytes { get; }
-        public int LengthRedundancyBytes { get; }
+        public byte FrameMaxDataBytes { get; }
 
-        public Protocol(float[] header, SinusoidalSignal one, SinusoidalSignal zero, int sampleRate, int samplesPerBit, int maxFrameDataBytes, float threshold, GenericGF gf, int redundancyBytes, int lengthRedundancyBytes)
+        public Protocol(float amplitude,int sampleRate, int samplesPerBit)
         {
-            Header = header.Clone() as float[];
-            HeaderPower = 0f;
-            HeaderMagnitude = 0f;
-            foreach (float sample in header)
+            // preamble 32 bits: 10101010 10101010 10101010 10101011
+            Preamble = new BitArray(new byte[4] { 0x55, 0x55, 0x55, 0xD5 });
+            IPGBits = 32;
+
+            ClockSync = new float[8 * samplesPerBit];
+            int counter = 0;
+            foreach (bool bit in new BitArray(new byte[1] { 0x55 }))
             {
-                HeaderPower += sample * sample;
-                HeaderMagnitude = MathF.Max(HeaderMagnitude, MathF.Abs(sample));
+                float sample = bit ? amplitude : -amplitude;
+                for (int i = 0; i < samplesPerBit; i++)
+                {
+                    ClockSync[counter++] = sample;
+                }
             }
+            ClockSyncPower = amplitude * amplitude * counter;
+            SFDByte = 171;
+
+            Amplitude = amplitude;
             WaveFormat = WaveFormat.CreateIeeeFloatWaveFormat(sampleRate, 1);
             SamplesPerBit = samplesPerBit;
             SamplesPerByte = samplesPerBit << 3;
-            FrameMaxDataBytes = maxFrameDataBytes;
-            Threshold = threshold;
-
-            One = new float[samplesPerBit];
-            float time = 0f;
-            float timeStep = 1f / sampleRate;
-            for (int i = 0; i < samplesPerBit; i++)
-            {
-                One[i] = one.Evaluate(time);
-                time += timeStep;
-            }
-
-            Zero = new float[samplesPerBit];
-            time = 0f;
-            for (int i = 0; i < samplesPerBit; i++)
-            {
-                Zero[i] = zero.Evaluate(time);
-                time += timeStep;
-            }
-
-            GaloisField = gf;
-            RedundancyBytes = redundancyBytes;
-            LengthRedundancyBytes = lengthRedundancyBytes;
-            FullFrameSampleCount = Header.Length + SamplesPerByte * (FrameMaxDataBytes + RedundancyBytes);
+            FrameMaxDataBytes = 252;
         }
     }
 }

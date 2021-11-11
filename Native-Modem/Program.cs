@@ -1,130 +1,50 @@
-﻿using Microsoft.Win32;
-using NAudio.Wave;
-using NAudio.Wave.Asio;
+﻿using NAudio.Wave.Asio;
 using System;
-using System.Collections;
 using System.IO;
-using System.Runtime.InteropServices;
-using System.Diagnostics;
-using STH1123.ReedSolomon;
 
 namespace Native_Modem
 {
-    class Program 
+    class Program
     {
-        static float[] preamble;
         [STAThread]
         static void Main()
         {
-            //ReedSolomonTest();
-            GenerateRandomBits();
-            //RecordAndPlay();
-            PreambleBuild(48000, 960, 1);
-            SynchronousModemTest();
+            SynchronousModemTest(true, true);
             CompareResult();
             Console.ReadLine();
         }
 
-        static void ReedSolomonTest()
-        {
-            int[] input = new int[] { 16, 1234, 432154 };
-            foreach (int i in input)
-            {
-                Console.Write($"{i}, ");
-            }
-            Console.WriteLine();
-            GenericGF gf = new GenericGF(285, 256, 1);
-            ReedSolomonEncoder encoder = new ReedSolomonEncoder(gf);
-            encoder.Encode(input, 2);
-            foreach (int i in input)
-            {
-                Console.Write($"{i}, ");
-            }
-            Console.WriteLine();
-            input[1] = 97;
-            foreach (int i in input)
-            {
-                Console.Write($"{i}, ");
-            }
-            Console.WriteLine();
-            ReedSolomonDecoder decoder = new ReedSolomonDecoder(gf);
-            Console.WriteLine(decoder.Decode(input, 2));
-            foreach (int i in input)
-            {
-                Console.Write($"{i}, ");
-            }
-            Console.WriteLine();
-        }
-
-        static void PreambleBuild(int SampleRate, int SampleCount, float amplitude)
-        {
-            
-            Debug.Assert(SampleRate != 0);
-            preamble = new float[SampleCount];
-
-            const float frequencyMin = 1000f;
-            const float frequencyMax = 10000f;
-            int half = SampleCount >> 1;
-            float frequencyStep = (frequencyMax - frequencyMin) / SampleCount * 2f;
-            float timeStep = 1f / SampleRate;
-            float frequency = frequencyMin;
-            float t = 0f;
-            for (var i = 0; i < SampleCount; ++i)
-            {
-                if (i <= half)
-                {
-                    frequency += frequencyStep;
-                }
-                else
-                {
-                    frequency -= frequencyStep;
-                }
-                t += frequency * timeStep * 2f * MathF.PI;
-                preamble[i] = MathF.Sin(t) * amplitude;
-            }
-        }
-
         static void CompareResult()
         {
-            StreamReader iStream = new StreamReader("../../../INPUT.txt");
-            StreamReader oStream = new StreamReader("../../../OUTPUT.txt");
-            string input = iStream.ReadToEnd();
-            string output = oStream.ReadToEnd();
+            BinaryReader iStream = new BinaryReader(new FileStream("../../../INPUT.bin", FileMode.Open, FileAccess.Read));
+            BinaryReader oStream = new BinaryReader(new FileStream("../../../OUTPUT.bin", FileMode.Open, FileAccess.Read));
+            int iLength = (int)iStream.BaseStream.Length;
+            int oLength = (int)oStream.BaseStream.Length;
+            if (iLength != oLength)
+            {
+                Console.WriteLine($"Input and output have different length! In: {iLength}, Out: {oLength}");
+                return;
+            }
+            byte[] input = iStream.ReadBytes(iLength);
+            byte[] output = oStream.ReadBytes(oLength);
             iStream.Close();
             oStream.Close();
 
-            if (input.Length != output.Length)
+            int sameCount = 0;
+            for (int i = 0; i < iLength; i++)
             {
-                Console.WriteLine($"Input and output have different length! In: {input.Length}, Out: {output.Length}");
-            }
-            else
-            {
-                int sameCount = 0;
-                for (int i = 0; i < input.Length; i++)
+                if (input[i] == output[i])
                 {
-                    if (input[i] == output[i])
-                    {
-                        sameCount++;
-                    }
+                    sameCount++;
                 }
-
-                Console.WriteLine($"Correct bits: {sameCount} / {input.Length}, {(float)sameCount / input.Length * 100f}%");
             }
+
+            Console.WriteLine($"Correct bits: {sameCount} / {iLength}, {(float)sameCount / iLength * 100f}%");
         }
 
-        static void SynchronousModemTest()
+        static void SynchronousModemTest(bool recordTx, bool recordRx)
         {
-            Protocol protocol = new Protocol(
-                   preamble,
-                   new SinusoidalSignal(1f, 4000f, 0f),
-                   new SinusoidalSignal(1f, 4000f, 180f),
-                   48000,
-                   24,
-                   11,
-                   0f,
-                   new GenericGF(285, 256, 1),
-                   9,
-                   2);
+            Protocol protocol = new Protocol(0.5f, 48000, 6);
             string driverName = SelectAsioDriver();
             Console.WriteLine("Do you want to configure the control panel? (y/n)");
             if (char.TryParse(Console.ReadLine(), out char c))
@@ -138,43 +58,40 @@ namespace Native_Modem
                     driver.ReleaseComAsioDriver();
                 }
             }
-            //SynchronousModem modem = new SynchronousModem(protocol, driverName, "../../../transportRecord.wav", "../../../receiverRecord.wav", "../../../syncPower.wav");
-            SynchronousModem modem = new SynchronousModem(protocol, driverName);
+
+            Console.WriteLine("Please enter your MAC address (in decimal): ");
+            int address;
+            while (!int.TryParse(Console.ReadLine(), out address) || address < 0 || address > 255)
+            {
+                Console.WriteLine("MAC address invalid. It should be an integer in [0, 255]. Please try again: ");
+            }
+
+            SynchronousModem modem = new SynchronousModem(protocol, (byte)address, driverName, recordTx ? "../../../transportRecord.wav" : null, recordRx ? "../../../receiverRecord.wav" : null);
 
             //Start modem and prepare to write to file
-            StreamWriter writer = new StreamWriter("../../../OUTPUT.txt");
+            BinaryWriter writer = new BinaryWriter(new FileStream("../../../OUTPUT.bin", FileMode.OpenOrCreate, FileAccess.Write));
             int frameCount = 0;
-            modem.Start(array =>
+            modem.Start((source, type, data) =>
             {
-                Console.Write($"Received frame {frameCount}: ");
-                if (array == null)
-                {
-                    Console.Write("Failed to receive!");
-                }
-                else
-                {
-                    foreach (byte byteData in array)
-                    {
-                        for (int i = 0; i < 8; i++)
-                        {
-                            int bit = (byteData >> i) & 0x1;
-                            Console.Write(bit);
-                            writer.Write(bit);
-                        }
-                    }
-                }
-                Console.WriteLine();
+                Console.WriteLine($"Received frame {frameCount} from {source} of type {(Protocol.Type)type}");
+                writer.Write(data);
                 frameCount++;
             });
 
-            Console.WriteLine("Press enter to send a bit array");
-            Console.ReadLine();
+            Console.WriteLine("Modem started.");
+
+            Console.WriteLine("Please enter destination MAC address (in decimal): ");
+            int destination;
+            while (!int.TryParse(Console.ReadLine(), out destination) || destination < 0 || destination > 255)
+            {
+                Console.WriteLine("MAC address invalid. It should be an integer in [0, 255]. Please try again: ");
+            }
 
             //Get input bits and transport
-            StreamReader inputStream = new StreamReader("../../../INPUT.txt");
-            byte[] input = BitReader.ReadBitsIntoBytes(inputStream);
+            BinaryReader inputStream = new BinaryReader(new FileStream("../../../INPUT.bin", FileMode.Open, FileAccess.Read));
+            byte[] input = inputStream.ReadBytes((int)inputStream.BaseStream.Length);
             inputStream.Close();
-            modem.Transport(input);
+            modem.Transport(new SendRequest((byte)destination, input));
 
             Console.WriteLine("Press enter to stop modem...");
             Console.ReadLine();
@@ -183,56 +100,6 @@ namespace Native_Modem
             modem.Stop();
             writer.Close();
             modem.Dispose();
-        }
-
-        static void GenerateRandomBits()
-        {
-            StreamWriter file = new StreamWriter("../../../INPUT.txt");
-            Random random = new Random();
-            for (int i = 0; i < 10000; i++)
-            {
-                file.Write(random.Next(0, 2));
-            }
-            file.Close();
-        }
-
-        static void RecordAndPlay()
-        {
-            string driverName = SelectAsioDriver();
-            Console.WriteLine("Do you want to configure the control panel? (y/n)");
-            if (char.TryParse(Console.ReadLine(), out char c))
-            {
-                if (c == 'y')
-                {
-                    AsioDriver driver = AsioDriver.GetAsioDriverByName(driverName);
-                    driver.ControlPanel();
-                    Console.WriteLine("Press enter after setup the control panel");
-                    Console.ReadLine();
-                    driver.ReleaseComAsioDriver();
-                }
-            }
-
-            Recorder recorder = new Recorder(driverName);
-
-            WaveFormat signalFormat = WaveFormat.CreateIeeeFloatWaveFormat(48000, 1);
-            WaveFormat recordFormat = WaveFormat.CreateIeeeFloatWaveFormat(48000, 1);
-            recorder.SetupArgs(recordFormat);
-
-            SignalGenerator signal = new SignalGenerator(new SinusoidalSignal[] {
-                new SinusoidalSignal(1f, 1000f), new SinusoidalSignal(1f, 10000f) },
-                signalFormat, 0.02f);
-            if (!recorder.StartRecordAndPlayback(recordPath: "../../../record.wav", playbackProvider: signal))
-            {
-                Console.WriteLine("Start record and playback failed!");
-                recorder.Dispose();
-                return;
-            }
-
-            Console.WriteLine("Press enter to stop recording and playing...");
-            Console.ReadLine();
-            recorder.StopRecordAndPlayback();
-
-            recorder.Dispose();
         }
 
         static string SelectAsioDriver()
