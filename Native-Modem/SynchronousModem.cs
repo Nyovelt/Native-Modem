@@ -1,7 +1,6 @@
 ﻿using B83.Collections;
 using NAudio.Wave;
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Force.Crc32;
@@ -36,7 +35,7 @@ namespace Native_Modem
         readonly Queue<SendRequest> modulateQueue;
         readonly byte macAddress;
 
-        readonly float[] buffer = new float[1024];
+        readonly float[] buffer = new float[2048];
 
         ModemState modemState;
 
@@ -138,7 +137,7 @@ namespace Native_Modem
             Console.WriteLine($"Choosing the output channel: {asioOut.AsioOutputChannelName(outChannel)}");
         }
 
-        async Task ModulateIPG()
+        async Task PushIPG()
         {
             for (int i = 0; i < protocol.IPGBits; i++)
             {
@@ -154,49 +153,62 @@ namespace Native_Modem
             }
         }
 
-        async Task ModulateBit(bool bit)
+        async Task PushLowHigh(bool high)
         {
             if (!await TaskUtilities.WaitUntilUnless(() => TxFIFO.AvailableFor(protocol.SamplesPerBit), () => modemState != ModemState.Running))
             {
                 return;
             }
 
-            float sample = bit ? protocol.Amplitude : -protocol.Amplitude;
+            float sample = high ? protocol.Amplitude : -protocol.Amplitude;
             for (int i = 0; i < protocol.SamplesPerBit; i++)
             {
                 TxFIFO.Push(sample);
             }
         }
 
-        async Task ModulateBits(BitArray bits)
+        async Task PushPreamble()
         {
-            foreach (bool bit in bits)
+            foreach (bool high in protocol.Preamble)
             {
-                await ModulateBit(bit);
+                await PushLowHigh(high);
             }
         }
 
-        async Task ModulateByte(int dataByte)
+        async Task PushPhase(int phase)
         {
-            for (int j = 0; j < 8; j++)
+            if (!await TaskUtilities.WaitUntilUnless(() => TxFIFO.AvailableFor(protocol.SamplesPerBit), () => modemState != ModemState.Running))
             {
-                if (((dataByte >> j) & 0x1) == 1)
-                {
-                    await ModulateBit(true);
-                }
-                else
-                {
-                    await ModulateBit(false);
-                }
+                return;
+            }
+
+            for (int i = 0; i < protocol.SamplesPerBit; i++)
+            {
+                TxFIFO.Push(protocol.PhaseLevel[phase]);
             }
         }
 
-        async Task ModulateBytes(byte[] data)
+        async Task<int> ModulateByte(byte dataByte, int phase)
+        {
+            int levels = Protocol.Convert8To10(dataByte);
+            for (int i = 0; i < 10; i++)
+            {
+                if (((levels >> i) & 0x01) == 0x01)
+                {
+                    phase = (phase + 1) & 0b11;
+                }
+                await PushPhase(phase);
+            }
+            return phase;
+        }
+
+        async Task<int> ModulateBytes(byte[] data, int phase)
         {
             foreach (byte dataByte in data)
             {
-                await ModulateByte(dataByte);
+                phase = await ModulateByte(dataByte, phase);
             }
+            return phase;
         }
 
         async Task ModulateFrame(byte dest_addr, byte type, byte[] data, int offset, byte length)
@@ -213,8 +225,9 @@ namespace Native_Modem
             }
 
             Crc32Algorithm.ComputeAndWriteToEnd(frame);
-            await ModulateBits(protocol.Preamble);
-            await ModulateBytes(frame);
+            await PushPreamble();
+            await ModulateBytes(frame, protocol.StartPhase);
+            await PushIPG();
         }
 
         async Task Modulate()
@@ -242,19 +255,22 @@ namespace Native_Modem
                 {
                     await ModulateFrame(request.DestinationAddress, (byte)Protocol.Type.DATA, request.Data, byteCounter, protocol.FrameMaxDataBytes);
                     byteCounter += protocol.FrameMaxDataBytes;
-                    await ModulateIPG();
                 }
 
                 int remainBytes = request.Data.Length - byteCounter;
                 if (remainBytes != 0)
                 {
                     await ModulateFrame(request.DestinationAddress, (byte)Protocol.Type.DATA, request.Data, byteCounter, (byte)remainBytes);
-                    await ModulateIPG();
                 }
             }
         }
 
-        bool DemodulateBit(List<float> samples)
+        /// <summary>
+        /// samples size should be: SamplesPerBit
+        /// </summary>
+        /// <param name="samples"></param>
+        /// <returns></returns>
+        bool DetectLowHigh(List<float> samples)
         {
             float sum = 0f;
             for (int i = 0; i < protocol.SamplesPerBit; i++)
@@ -264,23 +280,47 @@ namespace Native_Modem
             return sum > 0f;
         }
 
-        byte DemodulateByte(List<float> samples)
+        struct Temp
+        {
+            public int Phase;
+            public float Sum;
+        }
+        static RingBuffer<Temp> TEMP = new RingBuffer<Temp>(10);
+        /// <summary>
+        /// samples size should be: SamplesPerTenBits
+        /// </summary>
+        /// <param name="samples"></param>
+        /// <returns></returns>
+        byte DemodulateByte(List<float> samples, ref int phase, int time)
         {
             int count = 0;
-            int ret = 0;
-            for (int i = 0; i < 8; i++)
+            int raw = 0;
+            for (int i = 0; i < 10; i++)
             {
                 float sum = 0f;
                 for (int j = 0; j < protocol.SamplesPerBit; j++)
                 {
                     sum += samples[count++];
                 }
-                if (sum > 0f)
+                TEMP.Add(new Temp() { Phase = phase, Sum = sum });
+                try
                 {
-                    ret |= 0x1 << i;
+                    if (protocol.GetBit(sum, ref phase))
+                    {
+                        raw |= 0x1 << i;
+                    }
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine($"{e.Message}, time: {(float)time / protocol.WaveFormat.SampleRate}, bit: {i + 1} / 10");
+                    foreach (Temp t in TEMP)
+                    {
+                        Console.Write($"{t.Sum} {t.Phase}|");
+                    }
+                    Console.WriteLine();
                 }
             }
-            return (byte)ret;
+            return Protocol.Convert10To8(raw);
         }
 
         enum DemodulateState
@@ -305,18 +345,19 @@ namespace Native_Modem
             }
             float syncPowerLocalMax = 0f;
             float minSyncPower = 0.5f * protocol.ClockSyncPower;
-            int syncWaitSamples = protocol.SamplesPerBit >> 1;
-            int waitSFDTimeout = 32;
+            int syncWaitSamples = protocol.SamplesPerBit - 1;
+            int waitSFDTimeout = protocol.Preamble.Count;
 
             List<float> syncBitBuffer = new List<float>(protocol.SamplesPerBit);
             byte syncBits = 0;
-            List<float> decodeByteBuffer = new List<float>(protocol.SamplesPerByte);
+            List<float> decodeByteBuffer = new List<float>(protocol.SamplesPerTenBits);
             byte[] headerBuffer = new byte[4];
             byte[] frameBuffer = null;
             int waitSFDCount = 0;
 
             DemodulateState state = DemodulateState.Sync;
             int bytesDecoded = 0;
+            int phase = -1;
 
             int time = -1;
             while (true)
@@ -352,7 +393,7 @@ namespace Native_Modem
                             syncBitBuffer.Add(sample);
                             if (syncBitBuffer.Count >= syncWaitSamples)
                             {
-                                Console.WriteLine($"Clock synced! sync power: {syncPowerLocalMax / minSyncPower * 100f}%, time: {(float)(time - syncWaitSamples) / protocol.WaveFormat.SampleRate}");
+                                //Console.WriteLine($"Clock synced! sync power: {syncPowerLocalMax / minSyncPower * 100f}%, time: {(float)(time - syncWaitSamples) / protocol.WaveFormat.SampleRate}");
                                 syncPowerLocalMax = 0f;
                                 state = DemodulateState.Ready;
                                 syncBits = 0;
@@ -367,7 +408,7 @@ namespace Native_Modem
                         if (syncBitBuffer.Count == protocol.SamplesPerBit)
                         {
                             syncBits <<= 1;
-                            if (DemodulateBit(syncBitBuffer))
+                            if (DetectLowHigh(syncBitBuffer))
                             {
                                 syncBits |= 0x1;
                             }
@@ -379,7 +420,8 @@ namespace Native_Modem
                                 state = DemodulateState.Decode;
                                 bytesDecoded = 0;
                                 decodeByteBuffer.Clear();
-                                Console.WriteLine($"SFD detected. time: {(float)time / protocol.WaveFormat.SampleRate}");
+                                phase = protocol.StartPhase;
+                                //Console.WriteLine($"SFD detected. time: {(float)time / protocol.WaveFormat.SampleRate}");
                             }
                             else if (waitSFDCount >= waitSFDTimeout)
                             {
@@ -391,9 +433,9 @@ namespace Native_Modem
 
                     case DemodulateState.Decode:
                         decodeByteBuffer.Add(sample);
-                        if (decodeByteBuffer.Count == protocol.SamplesPerByte)
+                        if (decodeByteBuffer.Count == protocol.SamplesPerTenBits)
                         {
-                            byte data = DemodulateByte(decodeByteBuffer);
+                            byte data = DemodulateByte(decodeByteBuffer, ref phase, time);
                             decodeByteBuffer.Clear();
                             if (bytesDecoded < 4)
                             {
@@ -412,7 +454,7 @@ namespace Native_Modem
                                     {
                                         frameBuffer[i] = headerBuffer[i];
                                     }
-                                    Console.WriteLine($"A frame with data length {headerBuffer[3]} detected!");
+                                    //Console.WriteLine($"A frame with data length {headerBuffer[3]} detected!");
                                 }
                             }
                             else
@@ -424,7 +466,7 @@ namespace Native_Modem
                                     {
                                         byte[] payload = new byte[frameBuffer[3]];
                                         Array.Copy(frameBuffer, 4, payload, 0, payload.Length);
-                                        onFrameReceived.Invoke(frameBuffer[0], frameBuffer[2], frameBuffer);
+                                        onFrameReceived.Invoke(frameBuffer[0], frameBuffer[2], payload);
                                     }
                                     else
                                     {

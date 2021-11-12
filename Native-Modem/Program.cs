@@ -44,7 +44,7 @@ namespace Native_Modem
 
         static void SynchronousModemTest(bool recordTx, bool recordRx)
         {
-            Protocol protocol = new Protocol(0.5f, 48000, 6);
+            Protocol protocol = new Protocol(0.07f, 48000, 2, 64);
             string driverName = SelectAsioDriver();
             Console.WriteLine("Do you want to configure the control panel? (y/n)");
             if (char.TryParse(Console.ReadLine(), out char c))
@@ -69,13 +69,17 @@ namespace Native_Modem
             SynchronousModem modem = new SynchronousModem(protocol, (byte)address, driverName, recordTx ? "../../../transportRecord.wav" : null, recordRx ? "../../../receiverRecord.wav" : null);
 
             //Start modem and prepare to write to file
-            BinaryWriter writer = new BinaryWriter(new FileStream("../../../OUTPUT.bin", FileMode.OpenOrCreate, FileAccess.Write));
+            FileStream outFile = new FileStream("../../../OUTPUT.bin", FileMode.OpenOrCreate, FileAccess.Write);
+            outFile.SetLength(0);
+            BinaryWriter writer = new BinaryWriter(outFile);
             int frameCount = 0;
+            int byteCount = 0;
             modem.Start((source, type, data) =>
             {
                 Console.WriteLine($"Received frame {frameCount} from {source} of type {(Protocol.Type)type}");
                 writer.Write(data);
                 frameCount++;
+                byteCount += data.Length;
             });
 
             Console.WriteLine("Modem started.");
@@ -96,6 +100,7 @@ namespace Native_Modem
             Console.WriteLine("Press enter to stop modem...");
             Console.ReadLine();
             Console.WriteLine($"Received {frameCount} frames in total.");
+            Console.WriteLine($"Received {byteCount} bytes in total.");
 
             modem.Stop();
             writer.Close();
