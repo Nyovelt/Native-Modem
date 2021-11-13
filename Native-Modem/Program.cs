@@ -9,7 +9,7 @@ namespace Native_Modem
         [STAThread]
         static void Main()
         {
-            SynchronousModemTest(true, true);
+            SynchronousModemTest(false, false);
             CompareResult();
             Console.ReadLine();
         }
@@ -44,7 +44,12 @@ namespace Native_Modem
 
         static void SynchronousModemTest(bool recordTx, bool recordRx)
         {
-            Protocol protocol = new Protocol(0.07f, 48000, 2, 64);
+            Protocol protocol = new Protocol(
+                amplitude: 0.05f,
+                sampleRate: 48000,
+                samplesPerBit: 2,
+                maxPayloadSize: 64,
+                useStereo: false);
             string driverName = SelectAsioDriver();
             Console.WriteLine("Do you want to configure the control panel? (y/n)");
             if (char.TryParse(Console.ReadLine(), out char c))

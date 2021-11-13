@@ -35,7 +35,7 @@ namespace Native_Modem
         readonly Queue<SendRequest> modulateQueue;
         readonly byte macAddress;
 
-        readonly float[] buffer = new float[2048];
+        readonly float[] buffer;
 
         ModemState modemState;
 
@@ -44,14 +44,22 @@ namespace Native_Modem
             this.protocol = protocol;
             this.macAddress = macAddress;
 
-            TxFIFO = new SampleFIFO(protocol.WaveFormat, protocol.WaveFormat.SampleRate, saveTransportTo);
-            RxFIFO = new SampleFIFO(protocol.WaveFormat, protocol.WaveFormat.SampleRate >> 1, saveRecordTo);
+            TxFIFO = new SampleFIFO(protocol.SampleRate, protocol.SampleRate, saveTransportTo);
+            RxFIFO = new SampleFIFO(protocol.SampleRate, protocol.SampleRate >> 1, saveRecordTo);
             modulateQueue = new Queue<SendRequest>();
 
             asioOut = new AsioOut(driverName);
             SetupAsioOut();
-            asioOut.InitRecordAndPlayback(TxFIFO.ToWaveProvider(), protocol.WaveFormat.Channels, protocol.WaveFormat.SampleRate);
+            if (protocol.UseStereo)
+            {
+                asioOut.InitRecordAndPlayback(new MonoToStereoProvider16(TxFIFO.ToWaveProvider16()), 2, protocol.SampleRate);
+            }
+            else
+            {
+                asioOut.InitRecordAndPlayback(TxFIFO.ToWaveProvider(), 1, protocol.SampleRate);
+            }
 
+            buffer = new float[(protocol.UseStereo ? 2 : 1) * asioOut.FramesPerBuffer];
             modemState = ModemState.Idling;
         }
 
@@ -111,7 +119,14 @@ namespace Native_Modem
             {
                 Console.WriteLine("RxFIFO overflow!!!!!");
             }
-            RxFIFO.Push(buffer, sampleCount);
+            if (protocol.UseStereo)
+            {
+                RxFIFO.PushStereo(buffer, sampleCount);
+            }
+            else
+            {
+                RxFIFO.Push(buffer, sampleCount);
+            }
         }
 
         void SetupAsioOut()
@@ -280,12 +295,13 @@ namespace Native_Modem
             return sum > 0f;
         }
 
-        struct Temp
-        {
-            public int Phase;
-            public float Sum;
-        }
-        static RingBuffer<Temp> TEMP = new RingBuffer<Temp>(10);
+        //struct Temp
+        //{
+        //    public int Phase;
+        //    public float Sum;
+        //}
+        //static RingBuffer<Temp> TEMP = new RingBuffer<Temp>(10);
+
         /// <summary>
         /// samples size should be: SamplesPerTenBits
         /// </summary>
@@ -302,7 +318,7 @@ namespace Native_Modem
                 {
                     sum += samples[count++];
                 }
-                TEMP.Add(new Temp() { Phase = phase, Sum = sum });
+                //TEMP.Add(new Temp() { Phase = phase, Sum = sum });
                 try
                 {
                     if (protocol.GetBit(sum, ref phase))
@@ -312,12 +328,12 @@ namespace Native_Modem
                 }
                 catch (Exception e)
                 {
-                    Console.WriteLine($"{e.Message}, time: {(float)time / protocol.WaveFormat.SampleRate}, bit: {i + 1} / 10");
-                    foreach (Temp t in TEMP)
-                    {
-                        Console.Write($"{t.Sum} {t.Phase}|");
-                    }
-                    Console.WriteLine();
+                    //Console.WriteLine($"{e.Message}, time: {(float)time / protocol.SampleRate}, bit: {i + 1} / 10");
+                    //foreach (Temp t in TEMP)
+                    //{
+                    //    Console.Write($"{t.Sum} {t.Phase}|");
+                    //}
+                    //Console.WriteLine();
                 }
             }
             return Protocol.Convert10To8(raw);
@@ -325,6 +341,7 @@ namespace Native_Modem
 
         enum DemodulateState
         {
+            Standby,
             Sync,
             Ready,
             Decode
@@ -375,6 +392,10 @@ namespace Native_Modem
 
                 switch (state)
                 {
+                    case DemodulateState.Standby:
+
+                        break;
+
                     case DemodulateState.Sync:
                         float syncPower = 0f;
                         for (int j = 0; j < protocol.ClockSync.Length; j++)
@@ -446,6 +467,13 @@ namespace Native_Modem
                                     {
                                         state = DemodulateState.Sync;
                                         Console.WriteLine($"Frame to others ({headerBuffer[0]}) detected!");
+                                        break;
+                                    }
+                                    
+                                    if (headerBuffer[3] > protocol.FrameMaxDataBytes)
+                                    {
+                                        state = DemodulateState.Sync;
+                                        Console.WriteLine($"Frame of invalid length ({headerBuffer[3]} received!)");
                                         break;
                                     }
 

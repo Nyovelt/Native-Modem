@@ -11,9 +11,9 @@ namespace Native_Modem
 
         public WaveFormat WaveFormat => waveFormat;
 
-        public SampleFIFO(WaveFormat waveFormat, int size, string saveAudioTo = null)
+        public SampleFIFO(int sampleRate, int size, string saveAudioTo = null)
         {
-            this.waveFormat = waveFormat;
+            waveFormat = WaveFormat.CreateIeeeFloatWaveFormat(sampleRate, 1);
             ringBuffer = new RingBuffer<float>(size);
             if (!string.IsNullOrEmpty(saveAudioTo))
             {
@@ -54,6 +54,18 @@ namespace Native_Modem
             for (int i = 0; i < count; i++)
             {
                 ringBuffer.Add(sampleBuffer[i]);
+            }
+            if (writer != null)
+            {
+                writer.WriteSamples(sampleBuffer, 0, count);
+            }
+        }
+
+        public void PushStereo(float[] sampleBuffer, int count)
+        {
+            for (int i = 0; i < count; i += 2)
+            {
+                ringBuffer.Add(sampleBuffer[i] * 0.5f + sampleBuffer[i + 1] * 0.5f);
             }
             if (writer != null)
             {

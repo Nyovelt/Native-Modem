@@ -51,10 +51,10 @@ namespace Native_Modem
 
         public enum Type
         {
-            DATA = 0xAA,
-            ACKNOWLEDGEMENT = 0xAB,
-            MACPING_REQ = 0xAC,
-            MACPING_REPLY = 0xAD
+            DATA = 0,
+            ACKNOWLEDGEMENT = 1,
+            MACPING_REQ = 2,
+            MACPING_REPLY = 3
         }
 
         public BitArray Preamble { get; }
@@ -65,14 +65,15 @@ namespace Native_Modem
         public float ClockSyncPower { get; }
         public byte SFDByte { get; }
         public float Amplitude { get; }
-        public WaveFormat WaveFormat { get; }
+        public int SampleRate { get; }
         public int SamplesPerBit { get; }
         public int SamplesPerTenBits { get; }
         public byte FrameMaxDataBytes { get; }
+        public bool UseStereo { get; }
 
         readonly float powerThreshold;
 
-        public Protocol(float amplitude,int sampleRate, int samplesPerBit, byte maxPayloadSize)
+        public Protocol(float amplitude,int sampleRate, int samplesPerBit, byte maxPayloadSize, bool useStereo)
         {
             // preamble 32 bits: 10101010 10101010 10101010 10101011
             Preamble = new BitArray(new byte[4] { 0x55, 0x55, 0x55, 0xD5 });
@@ -95,10 +96,11 @@ namespace Native_Modem
 
             Amplitude = amplitude;
             powerThreshold = amplitude * 0.45f * samplesPerBit;
-            WaveFormat = WaveFormat.CreateIeeeFloatWaveFormat(sampleRate, 1);
+            SampleRate = sampleRate;
             SamplesPerBit = samplesPerBit;
             SamplesPerTenBits = samplesPerBit * 10;
             FrameMaxDataBytes = maxPayloadSize;
+            UseStereo = useStereo;
         }
 
         public bool GetBit(float power, ref int phase)
