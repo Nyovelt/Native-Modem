@@ -49,12 +49,29 @@ namespace Native_Modem
             return (byte)(low | (high << 4));
         }
 
-        public enum Type
+        public static class FrameType
         {
-            DATA = 0,
-            ACKNOWLEDGEMENT = 1,
-            MACPING_REQ = 2,
-            MACPING_REPLY = 3
+            public static readonly byte DATA = 0;
+            public static readonly byte ACKNOWLEDGEMENT = 1;
+            public static readonly byte MACPING_REQ = 2;
+            public static readonly byte MACPING_REPLY = 3;
+
+            public static string GetName(byte frameType)
+            {
+                switch (frameType)
+                {
+                    case 0:
+                        return "Data";
+                    case 1:
+                        return "Acknowledgement";
+                    case 2:
+                        return "MacPing_Req";
+                    case 3:
+                        return "MacPing_Reply";
+                    default:
+                        return "UNKNOWN";
+                }
+            }
         }
 
         public BitArray Preamble { get; }
@@ -65,11 +82,13 @@ namespace Native_Modem
         public float ClockSyncPower { get; }
         public byte SFDByte { get; }
         public float Amplitude { get; }
+        public float Threshold { get; }
         public int SampleRate { get; }
         public int SamplesPerBit { get; }
         public int SamplesPerTenBits { get; }
         public byte FrameMaxDataBytes { get; }
         public bool UseStereo { get; }
+        public int QuietCriteria { get; }
 
         readonly float powerThreshold;
 
@@ -95,12 +114,15 @@ namespace Native_Modem
             SFDByte = 171;
 
             Amplitude = amplitude;
-            powerThreshold = amplitude * 0.45f * samplesPerBit;
+            Threshold = amplitude * 0.45f;
             SampleRate = sampleRate;
             SamplesPerBit = samplesPerBit;
             SamplesPerTenBits = samplesPerBit * 10;
             FrameMaxDataBytes = maxPayloadSize;
             UseStereo = useStereo;
+            QuietCriteria = IPGBits >> 1 * SamplesPerBit;
+
+            powerThreshold = Threshold * samplesPerBit;
         }
 
         public bool GetBit(float power, ref int phase)

@@ -7,18 +7,6 @@ using Force.Crc32;
 
 namespace Native_Modem
 {
-    public struct SendRequest
-    {
-        public byte DestinationAddress;
-        public byte[] Data;
-
-        public SendRequest(byte destinationAddress, byte[] data)
-        {
-            DestinationAddress = destinationAddress;
-            Data = data;
-        }
-    }
-
     public class SynchronousModem
     {
         enum ModemState
@@ -34,7 +22,6 @@ namespace Native_Modem
         readonly SampleFIFO RxFIFO;
         readonly Queue<SendRequest> modulateQueue;
         readonly byte macAddress;
-
         readonly float[] buffer;
 
         ModemState modemState;
@@ -49,7 +36,7 @@ namespace Native_Modem
             modulateQueue = new Queue<SendRequest>();
 
             asioOut = new AsioOut(driverName);
-            SetupAsioOut();
+            AsioUtilities.SetupAsioOut(asioOut);
             if (protocol.UseStereo)
             {
                 asioOut.InitRecordAndPlayback(new MonoToStereoProvider16(TxFIFO.ToWaveProvider16()), 2, protocol.SampleRate);
@@ -127,29 +114,6 @@ namespace Native_Modem
             {
                 RxFIFO.Push(buffer, sampleCount);
             }
-        }
-
-        void SetupAsioOut()
-        {
-            Console.WriteLine("Select input channel:");
-            var inputChannels = asioOut.DriverInputChannelCount;
-            for (int i = 0; i < inputChannels; i++)
-            {
-                Console.WriteLine($"Input channel {i}: {asioOut.AsioInputChannelName(i)}");
-            }
-            int channel = int.Parse(Console.ReadLine());
-            asioOut.InputChannelOffset = channel;
-            Console.WriteLine($"Choosing the input channel: {asioOut.AsioInputChannelName(channel)}");
-
-            var outputChannels = asioOut.DriverOutputChannelCount;
-            Console.WriteLine("Select output channel:");
-            for (int i = 0; i < outputChannels; i++)
-            {
-                Console.WriteLine($"Output channel {i}: {asioOut.AsioOutputChannelName(i)}");
-            }
-            int outChannel = int.Parse(Console.ReadLine());
-            asioOut.ChannelOffset = outChannel;
-            Console.WriteLine($"Choosing the output channel: {asioOut.AsioOutputChannelName(outChannel)}");
         }
 
         async Task PushIPG()
@@ -268,14 +232,14 @@ namespace Native_Modem
                 int byteCounter = 0;
                 for (int i = 0; i < fullFrames; i++)
                 {
-                    await ModulateFrame(request.DestinationAddress, (byte)Protocol.Type.DATA, request.Data, byteCounter, protocol.FrameMaxDataBytes);
+                    await ModulateFrame(request.DestinationAddress, Protocol.FrameType.DATA, request.Data, byteCounter, protocol.FrameMaxDataBytes);
                     byteCounter += protocol.FrameMaxDataBytes;
                 }
 
                 int remainBytes = request.Data.Length - byteCounter;
                 if (remainBytes != 0)
                 {
-                    await ModulateFrame(request.DestinationAddress, (byte)Protocol.Type.DATA, request.Data, byteCounter, (byte)remainBytes);
+                    await ModulateFrame(request.DestinationAddress, Protocol.FrameType.DATA, request.Data, byteCounter, (byte)remainBytes);
                 }
             }
         }

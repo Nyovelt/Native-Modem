@@ -28,13 +28,13 @@ namespace Native_Modem
         {
             while (true)
             {
-                if (until.Invoke())
-                {
-                    return true;
-                }
                 if (unless.Invoke())
                 {
                     return false;
+                }
+                if (until.Invoke())
+                {
+                    return true;
                 }
                 await Task.Delay(SMALL_DELAY);
             }

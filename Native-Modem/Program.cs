@@ -81,7 +81,7 @@ namespace Native_Modem
             int byteCount = 0;
             modem.Start((source, type, data) =>
             {
-                Console.WriteLine($"Received frame {frameCount} from {source} of type {(Protocol.Type)type}");
+                Console.WriteLine($"Received frame {frameCount} from {source} of type {Protocol.FrameType.GetName(type)}");
                 writer.Write(data);
                 frameCount++;
                 byteCount += data.Length;
