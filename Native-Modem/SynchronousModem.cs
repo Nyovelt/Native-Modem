@@ -325,7 +325,6 @@ namespace Native_Modem
                 syncBuffer.Add(0f);
             }
             float syncPowerLocalMax = 0f;
-            float minSyncPower = 0.5f * protocol.ClockSyncPower;
             int syncWaitSamples = protocol.SamplesPerBit - 1;
             int waitSFDTimeout = protocol.Preamble.Count;
 
@@ -367,7 +366,7 @@ namespace Native_Modem
                             syncPower += syncBuffer[j] * protocol.ClockSync[j];
                         }
 
-                        if (syncPower > minSyncPower && syncPower > syncPowerLocalMax)
+                        if (syncPower > protocol.ClockSyncPowerThreshold && syncPower > syncPowerLocalMax)
                         {
                             syncPowerLocalMax = syncPower;
                             sync = true;

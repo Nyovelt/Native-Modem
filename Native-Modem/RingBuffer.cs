@@ -252,5 +252,16 @@ namespace B83.Collections
             throw new System.NotSupportedException();
         }
 
+        //Added by wjw78879
+        public void FillWith(T item)
+        {
+            m_Count = m_Capacity;
+            m_Write = 0;
+            m_Read = 0;
+            for (int i = 0; i < m_Capacity; i++)
+            {
+                m_Data[i] = item;
+            }
+        }
     }
 }

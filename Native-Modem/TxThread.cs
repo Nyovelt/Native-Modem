@@ -1,7 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 
 namespace Native_Modem
@@ -13,31 +10,26 @@ namespace Native_Modem
             readonly Protocol protocol;
 
             public SampleFIFO TxFIFO { get; }
-
-            bool stopped;
             
             public TxThread(Protocol protocol, int bufferSize, string saveAudioTo = null)
             {
                 this.protocol = protocol;
 
                 TxFIFO = new SampleFIFO(protocol.SampleRate, bufferSize, saveAudioTo);
-
-                stopped = false;
             }
 
             public void Dispose()
             {
-                stopped = true;
                 TxFIFO.Dispose();
             }
 
-            async Task PushLevel(bool high)
+            async Task<bool> PushLevel(bool high, Func<bool> cancel)
             {
                 if (!await TaskUtilities.WaitUntilUnless(
                     () => TxFIFO.AvailableFor(protocol.SamplesPerBit), 
-                    () => stopped))
+                    () => cancel.Invoke()))
                 {
-                    return;
+                    return false;
                 }
 
                 float sample = high ? protocol.Amplitude : -protocol.Amplitude;
@@ -45,32 +37,38 @@ namespace Native_Modem
                 {
                     TxFIFO.Push(sample);
                 }
+                return true;
             }
 
-            async Task PushPreamble()
+            async Task<bool> PushPreamble(Func<bool> cancel)
             {
                 foreach (bool high in protocol.Preamble)
                 {
-                    await PushLevel(high);
+                    if (!await PushLevel(high, cancel))
+                    {
+                        return false;
+                    }
                 }
+                return true;
             }
 
-            async Task PushPhase(int phase)
+            async Task<bool> PushPhase(int phase, Func<bool> cancel)
             {
                 if (!await TaskUtilities.WaitUntilUnless(
                     () => TxFIFO.AvailableFor(protocol.SamplesPerBit), 
-                    () => stopped))
+                    () => cancel.Invoke()))
                 {
-                    return;
+                    return false;
                 }
 
                 for (int i = 0; i < protocol.SamplesPerBit; i++)
                 {
                     TxFIFO.Push(protocol.PhaseLevel[phase]);
                 }
+                return true;
             }
 
-            async Task<int> PushByte(byte data, int phase)
+            async Task<int> PushByte(byte data, int phase, Func<bool> cancel)
             {
                 int levels = Protocol.Convert8To10(data);
                 for (int i = 0; i < 10; i++)
@@ -79,24 +77,35 @@ namespace Native_Modem
                     {
                         phase = (phase + 1) & 0b11;
                     }
-                    await PushPhase(phase);
+                    if (!await PushPhase(phase, cancel))
+                    {
+                        return -1;
+                    }
                 }
                 return phase;
             }
 
-            async Task<int> PushBytes(byte[] data, int phase)
+            async Task<int> PushBytes(byte[] data, int phase, Func<bool> cancel)
             {
                 foreach (byte dataByte in data)
                 {
-                    phase = await ModulateByte(dataByte, phase);
+                    phase = await PushByte(dataByte, phase, cancel);
+                    if (phase == -1)
+                    {
+                        return -1;
+                    }
                 }
                 return phase;
             }
 
-            public async Task Push(byte[] frame)
+            public async Task<bool> Push(byte[] frame, Func<bool> cancel)
             {
-                await PushPreamble();
-                _ = await PushBytes(frame, protocol.StartPhase);
+                if (!await PushPreamble(cancel))
+                {
+                    return false;
+                }
+                int phase = await PushBytes(frame, protocol.StartPhase, cancel);
+                return phase != -1;
             }
         }
     }

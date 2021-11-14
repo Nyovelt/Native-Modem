@@ -79,7 +79,7 @@ namespace Native_Modem
         public int StartPhase { get; }
         public int IPGBits { get; }
         public float[] ClockSync { get; }
-        public float ClockSyncPower { get; }
+        public float ClockSyncPowerThreshold { get; }
         public byte SFDByte { get; }
         public float Amplitude { get; }
         public float Threshold { get; }
@@ -89,10 +89,13 @@ namespace Native_Modem
         public byte FrameMaxDataBytes { get; }
         public bool UseStereo { get; }
         public int QuietCriteria { get; }
+        public double AckTimeout { get; }
 
         readonly float powerThreshold;
 
-        public Protocol(float amplitude,int sampleRate, int samplesPerBit, byte maxPayloadSize, bool useStereo)
+        const float syncPowerThreshold = 0.5f;
+
+        public Protocol(float amplitude,int sampleRate, int samplesPerBit, byte maxPayloadSize, bool useStereo, double ackTimeout)
         {
             // preamble 32 bits: 10101010 10101010 10101010 10101011
             Preamble = new BitArray(new byte[4] { 0x55, 0x55, 0x55, 0xD5 });
@@ -110,17 +113,18 @@ namespace Native_Modem
                     ClockSync[counter++] = sample;
                 }
             }
-            ClockSyncPower = amplitude * amplitude * counter;
+            ClockSyncPowerThreshold = amplitude * amplitude * counter * syncPowerThreshold;
             SFDByte = 171;
 
             Amplitude = amplitude;
-            Threshold = amplitude * 0.45f;
+            Threshold = amplitude * 0.4f;
             SampleRate = sampleRate;
             SamplesPerBit = samplesPerBit;
             SamplesPerTenBits = samplesPerBit * 10;
             FrameMaxDataBytes = maxPayloadSize;
             UseStereo = useStereo;
             QuietCriteria = IPGBits >> 1 * SamplesPerBit;
+            AckTimeout = ackTimeout;
 
             powerThreshold = Threshold * samplesPerBit;
         }
