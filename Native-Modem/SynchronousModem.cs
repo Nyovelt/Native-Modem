@@ -232,14 +232,14 @@ namespace Native_Modem
                 int byteCounter = 0;
                 for (int i = 0; i < fullFrames; i++)
                 {
-                    await ModulateFrame(request.DestinationAddress, Protocol.FrameType.DATA, request.Data, byteCounter, protocol.FrameMaxDataBytes);
+                    await ModulateFrame(request.DestinationAddress, (byte)Protocol.FrameType.Data, request.Data, byteCounter, protocol.FrameMaxDataBytes);
                     byteCounter += protocol.FrameMaxDataBytes;
                 }
 
                 int remainBytes = request.Data.Length - byteCounter;
                 if (remainBytes != 0)
                 {
-                    await ModulateFrame(request.DestinationAddress, Protocol.FrameType.DATA, request.Data, byteCounter, (byte)remainBytes);
+                    await ModulateFrame(request.DestinationAddress, (byte)Protocol.FrameType.Data, request.Data, byteCounter, (byte)remainBytes);
                 }
             }
         }

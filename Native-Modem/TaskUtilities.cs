@@ -1,7 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 
 namespace Native_Modem
@@ -45,6 +42,20 @@ namespace Native_Modem
                 }
                 await Task.Delay(SMALL_DELAY);
             }
+        }
+
+        public static async Task<bool> WaitForUnless(int milliseconds, Func<bool> unless)
+        {
+            int delays = milliseconds / SMALL_DELAY;
+            for (int i = 0; i < delays; i++)
+            {
+                if (unless.Invoke())
+                {
+                    return false;
+                }
+                await Task.Delay(SMALL_DELAY);
+            }
+            return true;
         }
 
         /// <summary>

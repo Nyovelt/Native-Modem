@@ -51,7 +51,7 @@ namespace Native_Modem
                 samplesPerBit: 2,
                 maxPayloadSize: 64,
                 useStereo: false,
-                ackTimeout: 100);
+                ackTimeout: 500);
             string driverName = SelectAsioDriver();
             Console.WriteLine("Do you want to configure the control panel? (y/n)");
             if (char.TryParse(Console.ReadLine(), out char c))
@@ -156,7 +156,7 @@ namespace Native_Modem
             int byteCount = 0;
             modem.Start((source, type, data) =>
             {
-                Console.WriteLine($"Received frame {frameCount} from {source} of type {Protocol.FrameType.GetName(type)}");
+                Console.WriteLine($"Received frame {frameCount} from {source} of type {type}");
                 writer.Write(data);
                 frameCount++;
                 byteCount += data.Length;

@@ -2,8 +2,6 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using NAudio.Wave;
-using Force.Crc32;
-using System.Timers;
 
 namespace Native_Modem
 {
@@ -13,21 +11,19 @@ namespace Native_Modem
         {
             FrameDetection,
             Rx,
-            Tx,
-            TxACK
+            Tx
         }
 
         readonly Protocol protocol;
         readonly AsioOut asioOut;
         readonly TxThread Tx;
         readonly RxThread Rx;
-        readonly Queue<byte[]> TxPending;
+        readonly Queue<TxSession> TxPending;
         readonly byte macAddress;
         readonly float[] RxBuffer;
         readonly Action<byte, byte[]> onDataReceived;
-        readonly Task loopTask;
-
-        readonly byte[] ackFrame;
+        readonly Dictionary<byte, uint> rxSessions;
+        readonly Dictionary<byte, uint> txSessions;
 
         bool disposed;
 
@@ -46,9 +42,9 @@ namespace Native_Modem
 
             Tx = new TxThread(protocol, protocol.SampleRate, saveTransportTo);
             Rx = new RxThread(protocol, protocol.SampleRate >> 1, saveRecordTo);
-            TxPending = new Queue<byte[]>();
+            TxPending = new Queue<TxSession>();
 
-            ackFrame = new byte[8];
+            rxSessions = new Dictionary<byte, uint>();
 
             asioOut = new AsioOut(driverName);
             AsioUtilities.SetupAsioOut(asioOut);
@@ -67,14 +63,12 @@ namespace Native_Modem
             asioOut.AudioAvailable += OnRxSamplesAvailable;
             asioOut.Play();
 
-            loopTask = Task.Run(MainLoop);
+            Task.Run(MainLoop);
         }
 
         public void Dispose()
         {
             disposed = true;
-
-            loopTask.Dispose();
 
             asioOut.Stop();
             asioOut.AudioAvailable -= OnRxSamplesAvailable;
@@ -86,28 +80,7 @@ namespace Native_Modem
 
         public void Transport(SendRequest sendRequest)
         {
-            int fullFrames = sendRequest.Data.Length / protocol.FrameMaxDataBytes;
-            int byteCounter = 0;
-            for (int i = 0; i < fullFrames; i++)
-            {
-                TxPending.Enqueue(WrapFrame(
-                    sendRequest.DestinationAddress,
-                    Protocol.FrameType.DATA,
-                    sendRequest.Data,
-                    byteCounter,
-                    protocol.FrameMaxDataBytes));
-            }
-
-            int remainBytes = sendRequest.Data.Length - byteCounter;
-            if (remainBytes != 0)
-            {
-                TxPending.Enqueue(WrapFrame(
-                    sendRequest.DestinationAddress,
-                    Protocol.FrameType.DATA,
-                    sendRequest.Data,
-                    byteCounter,
-                    (byte)remainBytes));
-            }
+            TxPending.Enqueue(new TxSession(sendRequest, protocol.FrameMaxDataBytes, macAddress, protocol.AckTimeout));
         }
 
         void OnRxSamplesAvailable(object sender, AsioAudioAvailableEventArgs e)
@@ -123,56 +96,14 @@ namespace Native_Modem
             }
         }
 
-        byte[] WrapFrame(byte dest_addr, byte type, byte[] data, int offset, byte length)
-        {
-            byte[] frame = new byte[8 + length];
-            frame[0] = dest_addr;
-            frame[1] = macAddress;
-            frame[2] = type;
-            frame[3] = length;
-
-            Array.Copy(data, offset, frame, 4, length);
-
-            Crc32Algorithm.ComputeAndWriteToEnd(frame);
-            return frame;
-        }
-
-        void SetAckFrame(byte dest_addr)
-        {
-            ackFrame[0] = dest_addr;
-            ackFrame[1] = macAddress;
-            ackFrame[2] = Protocol.FrameType.ACKNOWLEDGEMENT;
-            ackFrame[3] = 0;
-
-            Crc32Algorithm.ComputeAndWriteToEnd(ackFrame);
-        }
-
         bool UntilDisposed()
         {
             return disposed;
         }
 
-        bool ValidateFrame(byte[] frame)
-        {
-            if (frame[0] != macAddress)
-            {
-                return false;
-            }
-
-            return Crc32Algorithm.IsValidWithCrcAtEnd(frame);
-        }
-
         async Task MainLoop()
         {
-            bool waitingForACK = false;
-            byte[] frameReceived = null;
-            Timer ackTimer = new Timer(protocol.AckTimeout);
-            ackTimer.Elapsed += (sender, e) =>
-            {
-                waitingForACK = false;
-            };
             TaskStatus tempStatus;
-
             while (true)
             {
                 switch (state)
@@ -183,7 +114,8 @@ namespace Native_Modem
                             return;
                         }
 
-                        tempStatus = await Rx.DetectFrame(UntilDisposed, () => !waitingForACK && TxPending.Count > 0);
+                        tempStatus = await Rx.DetectFrame(UntilDisposed, 
+                            () => TxPending.TryPeek(out TxSession currentTxSession) && currentTxSession.Status == TxSession.TxStatus.ReadyToSend);
                         switch (tempStatus)
                         {
                             case TaskStatus.Success:
@@ -206,42 +138,108 @@ namespace Native_Modem
                             return;
                         }
 
-                        if (frame == null)
+                        if (frame != null)
                         {
-                            state = ModemState.FrameDetection;
-                        }
-                        else
-                        {
-                            frameReceived = frame;
-                            if (ValidateFrame(frameReceived))
-                            {
-                                if (frameReceived[2] == Protocol.FrameType.DATA)
-                                {
-                                    byte[] ret = new byte[frameReceived[3]];
-                                    Array.Copy(frameReceived, 4, ret, 0, frameReceived[3]);
-                                    onDataReceived.Invoke(frameReceived[1], ret);
-                                    state = ModemState.TxACK;
-                                }
-                                else if (frameReceived[2] == Protocol.FrameType.ACKNOWLEDGEMENT)
-                                {
-                                    if (waitingForACK)
-                                    {
-                                        TxPending.Dequeue();
-                                        waitingForACK = false;
-                                    }
-                                    state = ModemState.FrameDetection;
-                                }
-                                else
-                                {
-                                    state = ModemState.FrameDetection;
-                                    //...
-                                }
-                            }
-                            else
+                            if (!Protocol.Frame.IsValid(frame) || 
+                                Protocol.Frame.GetDestination(frame) != macAddress)
                             {
                                 state = ModemState.FrameDetection;
                             }
+
+                            byte source = Protocol.Frame.GetSource(frame);
+                            uint seqNum = Protocol.Frame.GetSequenceNumber(frame);
+                            Protocol.FrameType type = Protocol.Frame.GetType(frame);
+                            switch (type)
+                            {
+                                case Protocol.FrameType.Data:
+                                case Protocol.FrameType.Data_Start:
+                                case Protocol.FrameType.Data_End:
+                                    const uint NO_ACK = uint.MaxValue;
+                                    uint ackSeqNum = seqNum;
+                                    if (rxSessions.TryGetValue(source, out uint prevSeqNum))
+                                    {
+                                        switch (type)
+                                        {
+                                            case Protocol.FrameType.Data:
+                                                if (seqNum == Protocol.Frame.NextSequenceNumberOf(prevSeqNum))
+                                                {
+                                                    rxSessions[source] = seqNum;
+                                                    onDataReceived.Invoke(source, Protocol.Frame.ExtractData(frame));
+                                                }
+                                                else
+                                                {
+                                                    ackSeqNum = prevSeqNum;
+                                                }
+                                                break;
+                                            case Protocol.FrameType.Data_Start:
+                                                rxSessions[source] = seqNum;
+                                                break;
+                                            case Protocol.FrameType.Data_End:
+                                                if (seqNum == Protocol.Frame.NextSequenceNumberOf(prevSeqNum))
+                                                {
+                                                    rxSessions.Remove(source);
+                                                }
+                                                else
+                                                {
+                                                    ackSeqNum = prevSeqNum;
+                                                }
+                                                break;
+                                        }
+                                    }
+                                    else
+                                    {
+                                        if (type == Protocol.FrameType.Data_Start)
+                                        {
+                                            rxSessions[source] = seqNum;
+                                        }
+                                        else
+                                        {
+                                            ackSeqNum = NO_ACK;
+                                        }
+                                    }
+
+                                    if (ackSeqNum != NO_ACK && !await Tx.Push(
+                                            Protocol.Frame.WrapFrameWithoutData(
+                                                source,
+                                                macAddress,
+                                                Protocol.FrameType.
+                                                Acknowledgement,
+                                                ackSeqNum),
+                                            UntilDisposed))
+                                    {
+                                        return;
+                                    }
+                                    break;
+
+                                case Protocol.FrameType.Acknowledgement:
+                                    if (TxPending.TryPeek(out TxSession session))
+                                    {
+                                        if (session.ReceiveAck(source, seqNum))
+                                        {
+                                            TxPending.Dequeue();
+                                        }
+                                    }
+                                    break;
+
+                                case Protocol.FrameType.MacPing_Req:
+                                    if (!await Tx.Push(
+                                        Protocol.Frame.WrapFrameWithoutData(
+                                            source,
+                                            macAddress,
+                                            Protocol.FrameType.MacPing_Reply,
+                                            0),
+                                        UntilDisposed))
+                                    {
+                                        return;
+                                    }
+                                    break;
+
+                                case Protocol.FrameType.MacPing_Reply:
+                                    //handle macping
+                                    break;
+                            }
                         }
+                        state = ModemState.FrameDetection;
                         break;
 
                     case ModemState.Tx:
@@ -250,22 +248,11 @@ namespace Native_Modem
                             return;
                         }
 
-                        if (!await Tx.Push(TxPending.Peek(), UntilDisposed))
+                        if (!await Tx.Push(TxPending.Peek().GetFrameToSend(), UntilDisposed))
                         {
                             return;
                         }
-                        waitingForACK = true;
-                        ackTimer.Start();
-                        state = ModemState.FrameDetection;
-                        break;
-
-                    case ModemState.TxACK:
-                        //Not waiting for quiet
-                        SetAckFrame(frameReceived[1]);
-                        if (!await Tx.Push(ackFrame, UntilDisposed))
-                        {
-                            return;
-                        }
+                        TxPending.Peek().StartCountdown();
                         state = ModemState.FrameDetection;
                         break;
                 }

@@ -10,6 +10,7 @@ namespace Native_Modem
         readonly WaveFileWriter writer;
 
         public WaveFormat WaveFormat => waveFormat;
+        public int Count => ringBuffer.Count;
 
         public SampleFIFO(int sampleRate, int size, string saveAudioTo = null)
         {

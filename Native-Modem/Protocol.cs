@@ -1,18 +1,20 @@
 ﻿#define THROW_PHASE_ERROR
 
-using NAudio.Wave;
+using Force.Crc32;
+using System;
 using System.Collections;
 
 namespace Native_Modem
 {
     /// <summary>
     /// Preamble: 32bits
-    /// Frame: [ dest_addr (8 -> 10bits) | 
-    /// src_addr (8 -> 10bits) | 
-    /// type (8 -> 10bits) | 
-    /// length (8 -> 10bits) | 
-    /// payload (variable) | 
-    /// crc32 (32 -> 40bits) ]
+    /// Frame: [ dest_addr (8 bits) | 
+    /// src_addr (8 bits) | 
+    /// type (4 bits) | 
+    /// seq_num (4 bits) | 
+    /// length (8 bits) | 
+    /// payload (0 - max bytes) | 
+    /// crc32 (32 bits) ]
     /// MLT-3 & 4B5B
     /// </summary>
     public class Protocol
@@ -49,28 +51,60 @@ namespace Native_Modem
             return (byte)(low | (high << 4));
         }
 
-        public static class FrameType
+        public enum FrameType
         {
-            public static readonly byte DATA = 0;
-            public static readonly byte ACKNOWLEDGEMENT = 1;
-            public static readonly byte MACPING_REQ = 2;
-            public static readonly byte MACPING_REPLY = 3;
+            Data = 0,
+            Data_Start = 1,
+            Data_End = 2,
+            Acknowledgement = 3,
+            MacPing_Req = 4,
+            MacPing_Reply = 5
+        }
 
-            public static string GetName(byte frameType)
+        public static class Frame
+        {
+            public static byte GetDestination(byte[] frame) => frame[0];
+            public static byte GetSource(byte[] frame) => frame[1];
+            public static FrameType GetType(byte[] frame) => (FrameType)((uint)frame[2] & 0x0F);
+            public static uint GetSequenceNumber(byte[] frame) => (uint)frame[2] >> 4;
+            public static byte GetDataLength(byte[] frame) => frame[3];
+            public static bool IsValid(byte[] frame) => Crc32Algorithm.IsValidWithCrcAtEnd(frame);
+
+            public static uint RandomSequenceNumber() => (uint)new Random().Next(16);
+            public static uint NextSequenceNumberOf(uint seqNum) => (seqNum + 1) & 0x0F;
+            public static uint SequenceNumberMinus(uint lhs, uint rhs) => (lhs - rhs) & 0x0F;
+
+            public static byte[] WrapDataFrame(byte dest_addr, byte src_addr, uint seq_num, byte[] data, int offset, byte length)
             {
-                switch (frameType)
-                {
-                    case 0:
-                        return "Data";
-                    case 1:
-                        return "Acknowledgement";
-                    case 2:
-                        return "MacPing_Req";
-                    case 3:
-                        return "MacPing_Reply";
-                    default:
-                        return "UNKNOWN";
-                }
+                byte[] frame = new byte[8 + length];
+                frame[0] = dest_addr;
+                frame[1] = src_addr;
+                frame[2] = (byte)(((uint)FrameType.Data | (seq_num << 4)) & 0xFF);
+                frame[3] = length;
+
+                Array.Copy(data, offset, frame, 4, length);
+
+                Crc32Algorithm.ComputeAndWriteToEnd(frame);
+                return frame;
+            }
+
+            public static byte[] WrapFrameWithoutData(byte dest_addr, byte src_addr, FrameType type, uint seq_num)
+            {
+                byte[] frame = new byte[8];
+                frame[0] = dest_addr;
+                frame[1] = src_addr;
+                frame[2] = (byte)(((uint)type | (seq_num << 4)) & 0xFF);
+                frame[3] = 0;
+
+                Crc32Algorithm.ComputeAndWriteToEnd(frame);
+                return frame;
+            }
+
+            public static byte[] ExtractData(byte[] frame)
+            {
+                byte[] ret = new byte[frame[3]];
+                Array.Copy(frame, 4, ret, 0, frame[3]);
+                return ret;
             }
         }
 

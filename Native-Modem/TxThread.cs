@@ -104,8 +104,13 @@ namespace Native_Modem
                 {
                     return false;
                 }
-                int phase = await PushBytes(frame, protocol.StartPhase, cancel);
-                return phase != -1;
+
+                if (await PushBytes(frame, protocol.StartPhase, cancel) == -1)
+                {
+                    return false;
+                }
+
+                return await TaskUtilities.WaitForUnless(TxFIFO.Count * 1000 / protocol.SampleRate, cancel);
             }
         }
     }
