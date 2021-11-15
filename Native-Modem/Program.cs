@@ -51,7 +51,7 @@ namespace Native_Modem
                 samplesPerBit: 2,
                 maxPayloadSize: 64,
                 useStereo: false,
-                ackTimeout: 500);
+                ackTimeout: 200);
             string driverName = SelectAsioDriver();
             Console.WriteLine("Do you want to configure the control panel? (y/n)");
             if (char.TryParse(Console.ReadLine(), out char c))
@@ -105,7 +105,7 @@ namespace Native_Modem
             BinaryReader inputStream = new BinaryReader(new FileStream("../../../INPUT.bin", FileMode.Open, FileAccess.Read));
             byte[] input = inputStream.ReadBytes((int)inputStream.BaseStream.Length);
             inputStream.Close();
-            modem.Transport(new SendRequest((byte)destination, input));
+            modem.TransportData((byte)destination, input);
 
             Console.WriteLine("Press enter to stop modem...");
             Console.ReadLine();

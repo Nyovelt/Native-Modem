@@ -6,37 +6,26 @@ namespace Native_Modem
 {
     public partial class HalfDuplexModem
     {
-        class TxSession
+        class DataTransportSession : TransportSession
         {
-            public enum TxStatus
-            {
-                ReadyToSend,
-                WaitingForAck,
-                Finished
-            }
-
-            readonly byte destination;
             readonly Timer timer;
             readonly Queue<byte[]> framesPending;
             uint lastAck;
 
-            public TxStatus Status { get; private set; }
-
-            public TxSession(SendRequest sendRequest, byte maxDataPerFrame, byte macAddress, double ackTimeout)
+            public DataTransportSession(byte destination, HalfDuplexModem modem, Action<TransportSession> onFinished, byte[] data) : base(destination, modem, onFinished)
             {
-                destination = sendRequest.DestinationAddress;
-                timer = new Timer(ackTimeout);
-                timer.Elapsed += (sender, e) => Status = TxStatus.ReadyToSend;
+                timer = new Timer(modem.protocol.AckTimeout);
+                timer.Elapsed += (sender, e) => ReadyToSend = true;
                 framesPending = new Queue<byte[]>();
                 lastAck = Protocol.Frame.RandomSequenceNumber();
 
-                int fullFrames = sendRequest.Data.Length / maxDataPerFrame;
+                int fullFrames = data.Length / modem.protocol.FrameMaxDataBytes;
                 int byteCounter = 0;
                 uint seqCounter = Protocol.Frame.NextSequenceNumberOf(lastAck);
 
                 framesPending.Enqueue(Protocol.Frame.WrapFrameWithoutData(
                     destination,
-                    macAddress,
+                    modem.macAddress,
                     Protocol.FrameType.Data_Start,
                     seqCounter));
                 seqCounter = Protocol.Frame.NextSequenceNumberOf(seqCounter);
@@ -45,22 +34,22 @@ namespace Native_Modem
                 {
                     framesPending.Enqueue(Protocol.Frame.WrapDataFrame(
                         destination,
-                        macAddress,
+                        modem.macAddress,
                         seqCounter,
-                        sendRequest.Data,
+                        data,
                         byteCounter++,
-                        maxDataPerFrame));
+                        modem.protocol.FrameMaxDataBytes));
                     seqCounter = Protocol.Frame.NextSequenceNumberOf(seqCounter);
                 }
 
-                int remainBytes = sendRequest.Data.Length - byteCounter;
+                int remainBytes = data.Length - byteCounter;
                 if (remainBytes != 0)
                 {
                     framesPending.Enqueue(Protocol.Frame.WrapDataFrame(
                         destination,
-                        macAddress,
+                        modem.macAddress,
                         seqCounter,
-                        sendRequest.Data,
+                        data,
                         byteCounter++,
                         (byte)remainBytes));
                     seqCounter = Protocol.Frame.NextSequenceNumberOf(seqCounter);
@@ -68,23 +57,29 @@ namespace Native_Modem
 
                 framesPending.Enqueue(Protocol.Frame.WrapFrameWithoutData(
                     destination,
-                    macAddress,
+                    modem.macAddress,
                     Protocol.FrameType.Data_End,
                     seqCounter));
 
-                Status = TxStatus.ReadyToSend;
+                ReadyToSend = true;
             }
 
-            public bool ReceiveAck(byte src_addr, uint seqNum)
+            public override void OnSessionActivated()
             {
-                if (src_addr != destination)
+                OnLogInfo?.Invoke($"Start sending {framesPending.Count} frames to {destination}...");
+            }
+
+            public override void OnReceiveFrame(byte src_addr, Protocol.FrameType type, uint seqNum)
+            {
+                if (src_addr != destination || type != Protocol.FrameType.Acknowledgement)
                 {
-                    return false;
+                    return;
                 }
 
                 if (framesPending.Count == 0)
                 {
-                    return true;
+                    onFinished.Invoke(this);
+                    return;
                 }
 
 
@@ -93,26 +88,26 @@ namespace Native_Modem
                     lastAck = seqNum;
                     framesPending.Dequeue();
                     timer.Stop();
+                    OnLogInfo?.Invoke($"Frame sent successfully. {framesPending.Count} left.");
                     if (framesPending.Count == 0)
                     {
-                        Status = TxStatus.Finished;
-                        return true;
+                        OnLogInfo?.Invoke($"All frames sent successfully.");
+                        onFinished.Invoke(this);
                     }
                     else
                     {
-                        Status = TxStatus.ReadyToSend;
+                        ReadyToSend = true;
                     }
                 }
-                return false;
             }
 
-            public byte[] GetFrameToSend()
+            public override byte[] OnGetFrame()
             {
-                Status = TxStatus.WaitingForAck;
+                ReadyToSend = false;
                 return framesPending.Peek();
             }
 
-            public void StartCountdown()
+            public override void OnFrameSent()
             {
                 timer.Start();
             }

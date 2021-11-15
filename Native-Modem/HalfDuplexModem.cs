@@ -18,12 +18,15 @@ namespace Native_Modem
         readonly AsioOut asioOut;
         readonly TxThread Tx;
         readonly RxThread Rx;
-        readonly Queue<TxSession> TxPending;
+        readonly Queue<TransportSession> TxSessions;
         readonly byte macAddress;
         readonly float[] RxBuffer;
         readonly Action<byte, byte[]> onDataReceived;
         readonly Dictionary<byte, uint> rxSessions;
         readonly Dictionary<byte, uint> txSessions;
+
+        //public Protocol Protocol => protocol;
+        //public byte MacAddress => macAddress;
 
         bool disposed;
 
@@ -42,7 +45,7 @@ namespace Native_Modem
 
             Tx = new TxThread(protocol, protocol.SampleRate, saveTransportTo);
             Rx = new RxThread(protocol, protocol.SampleRate >> 1, saveRecordTo);
-            TxPending = new Queue<TxSession>();
+            TxSessions = new Queue<TransportSession>();
 
             rxSessions = new Dictionary<byte, uint>();
 
@@ -78,9 +81,24 @@ namespace Native_Modem
             Rx.Dispose();
         }
 
-        public void Transport(SendRequest sendRequest)
+        public void TransportData(byte destination, byte[] data)
         {
-            TxPending.Enqueue(new TxSession(sendRequest, protocol.FrameMaxDataBytes, macAddress, protocol.AckTimeout));
+            DataTransportSession session = new DataTransportSession(destination, this, OnTxSessionFinished, data);
+            TxSessions.Enqueue(session);
+            if (TxSessions.Count == 1)
+            {
+                ActivateTxSession(session);
+            }
+        }
+
+        public void MacPing(byte destination, double timeout)
+        {
+            MacPingSession session = new MacPingSession(destination, this, OnTxSessionFinished, timeout);
+            TxSessions.Enqueue(session);
+            if (TxSessions.Count == 1)
+            {
+                ActivateTxSession(session);
+            }
         }
 
         void OnRxSamplesAvailable(object sender, AsioAudioAvailableEventArgs e)
@@ -101,6 +119,30 @@ namespace Native_Modem
             return disposed;
         }
 
+        void OnTxSessionFinished(TransportSession session)
+        {
+            if (TxSessions.TryPeek(out TransportSession currentSession) && currentSession == session)
+            {
+                currentSession.OnLogInfo = null;
+                TxSessions.Dequeue();
+                if (TxSessions.TryPeek(out TransportSession nextSession))
+                {
+                    ActivateTxSession(nextSession);
+                }
+            }
+        }
+
+        void OnTxSessionLogInfo(string info)
+        {
+            Console.WriteLine(info);
+        }
+
+        void ActivateTxSession(TransportSession session)
+        {
+            session.OnLogInfo = OnTxSessionLogInfo;
+            session.OnSessionActivated();
+        }
+
         async Task MainLoop()
         {
             TaskStatus tempStatus;
@@ -115,7 +157,7 @@ namespace Native_Modem
                         }
 
                         tempStatus = await Rx.DetectFrame(UntilDisposed, 
-                            () => TxPending.TryPeek(out TxSession currentTxSession) && currentTxSession.Status == TxSession.TxStatus.ReadyToSend);
+                            () => TxSessions.TryPeek(out TransportSession currentTxSession) && currentTxSession.ReadyToSend);
                         switch (tempStatus)
                         {
                             case TaskStatus.Success:
@@ -211,16 +253,6 @@ namespace Native_Modem
                                     }
                                     break;
 
-                                case Protocol.FrameType.Acknowledgement:
-                                    if (TxPending.TryPeek(out TxSession session))
-                                    {
-                                        if (session.ReceiveAck(source, seqNum))
-                                        {
-                                            TxPending.Dequeue();
-                                        }
-                                    }
-                                    break;
-
                                 case Protocol.FrameType.MacPing_Req:
                                     if (!await Tx.Push(
                                         Protocol.Frame.WrapFrameWithoutData(
@@ -234,8 +266,12 @@ namespace Native_Modem
                                     }
                                     break;
 
+                                case Protocol.FrameType.Acknowledgement:
                                 case Protocol.FrameType.MacPing_Reply:
-                                    //handle macping
+                                    if (TxSessions.TryPeek(out TransportSession session))
+                                    {
+                                        session.OnReceiveFrame(source, type, seqNum);
+                                    }
                                     break;
                             }
                         }
@@ -248,11 +284,11 @@ namespace Native_Modem
                             return;
                         }
 
-                        if (!await Tx.Push(TxPending.Peek().GetFrameToSend(), UntilDisposed))
+                        if (!await Tx.Push(TxSessions.Peek().OnGetFrame(), UntilDisposed))
                         {
                             return;
                         }
-                        TxPending.Peek().StartCountdown();
+                        TxSessions.Peek().OnFrameSent();
                         state = ModemState.FrameDetection;
                         break;
                 }
