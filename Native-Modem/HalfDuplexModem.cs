@@ -23,7 +23,6 @@ namespace Native_Modem
         readonly float[] RxBuffer;
         readonly Action<byte, byte[]> onDataReceived;
         readonly Dictionary<byte, uint> rxSessions;
-        readonly Dictionary<byte, uint> txSessions;
 
         //public Protocol Protocol => protocol;
         //public byte MacAddress => macAddress;
@@ -196,6 +195,7 @@ namespace Native_Modem
                                 case Protocol.FrameType.Data:
                                 case Protocol.FrameType.Data_Start:
                                 case Protocol.FrameType.Data_End:
+                                    Console.WriteLine($"Data frame of type {type} received!");
                                     const uint NO_ACK = uint.MaxValue;
                                     uint ackSeqNum = seqNum;
                                     if (rxSessions.TryGetValue(source, out uint prevSeqNum))
@@ -240,14 +240,15 @@ namespace Native_Modem
                                         }
                                     }
 
-                                    if (ackSeqNum != NO_ACK && !await Tx.Push(
+                                    if (ackSeqNum != NO_ACK && 
+                                        (! await Rx.WaitUntilQuiet(UntilDisposed) ||
+                                        !await Tx.Push(
                                             Protocol.Frame.WrapFrameWithoutData(
                                                 source,
                                                 macAddress,
-                                                Protocol.FrameType.
-                                                Acknowledgement,
+                                                Protocol.FrameType.Acknowledgement,
                                                 ackSeqNum),
-                                            UntilDisposed))
+                                            UntilDisposed)))
                                     {
                                         return;
                                     }

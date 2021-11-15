@@ -37,8 +37,9 @@ namespace Native_Modem
                         modem.macAddress,
                         seqCounter,
                         data,
-                        byteCounter++,
+                        byteCounter,
                         modem.protocol.FrameMaxDataBytes));
+                    byteCounter += modem.protocol.FrameMaxDataBytes;
                     seqCounter = Protocol.Frame.NextSequenceNumberOf(seqCounter);
                 }
 
@@ -50,7 +51,7 @@ namespace Native_Modem
                         modem.macAddress,
                         seqCounter,
                         data,
-                        byteCounter++,
+                        byteCounter,
                         (byte)remainBytes));
                     seqCounter = Protocol.Frame.NextSequenceNumberOf(seqCounter);
                 }
@@ -82,7 +83,7 @@ namespace Native_Modem
                     return;
                 }
 
-
+                Console.WriteLine($"Ack {seqNum} received");
                 if (seqNum == Protocol.Frame.NextSequenceNumberOf(lastAck))
                 {
                     lastAck = seqNum;
@@ -104,6 +105,7 @@ namespace Native_Modem
             public override byte[] OnGetFrame()
             {
                 ReadyToSend = false;
+                Console.WriteLine("Sending!");
                 return framesPending.Peek();
             }
 

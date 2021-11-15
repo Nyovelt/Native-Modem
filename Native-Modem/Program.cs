@@ -9,7 +9,7 @@ namespace Native_Modem
         [STAThread]
         static void Main()
         {
-            HalfDuplexModemTest(false, false);
+            HalfDuplexModemTest(true, true);
             //SynchronousModemTest(false, false);
             CompareResult();
             Console.ReadLine();
@@ -49,7 +49,7 @@ namespace Native_Modem
                 amplitude: 0.05f,
                 sampleRate: 48000,
                 samplesPerBit: 2,
-                maxPayloadSize: 64,
+                maxPayloadSize: 128,
                 useStereo: false,
                 ackTimeout: 200);
             string driverName = SelectAsioDriver();

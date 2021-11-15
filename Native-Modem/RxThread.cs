@@ -71,6 +71,10 @@ namespace Native_Modem
                     {
                         quietCount++;
                     }
+                    else
+                    {
+                        quietCount = 0;
+                    }
                 }
                 return TaskStatus.Success;
             }

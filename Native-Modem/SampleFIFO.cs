@@ -81,17 +81,29 @@ namespace Native_Modem
 
         public int Read(float[] buffer, int offset, int count)
         {
+            //int c = 0;
+            //for (; c < count; c++)
+            //{
+            //    if (ringBuffer.Count > 0)
+            //    {
+            //        buffer[offset + c] = ringBuffer.ReadAndRemoveNext();
+            //    }
+            //    else
+            //    {
+            //        break;
+            //    }
+            //}
+
+            int samples = ringBuffer.Count > count ? count : ringBuffer.Count;
+            int zeroes = count - samples;
             int c = 0;
+            for (; c < zeroes; c++)
+            {
+                buffer[offset + c] = 0f;
+            }
             for (; c < count; c++)
             {
-                if (ringBuffer.Count > 0)
-                {
-                    buffer[offset + c] = ringBuffer.ReadAndRemoveNext();
-                }
-                else
-                {
-                    break;
-                }
+                buffer[offset + c] = ringBuffer.ReadAndRemoveNext();
             }
 
             return c;
