@@ -4,7 +4,7 @@ using System.Timers;
 
 namespace Native_Modem
 {
-    public partial class HalfDuplexModem
+    public partial class FullDuplexModem
     {
         class DataTransportSession : TransportSession
         {
@@ -12,7 +12,7 @@ namespace Native_Modem
             readonly Queue<byte[]> framesPending;
             uint lastAck;
 
-            public DataTransportSession(byte destination, HalfDuplexModem modem, Action<TransportSession> onFinished, byte[] data) : base(destination, modem, onFinished)
+            public DataTransportSession(byte destination, FullDuplexModem modem, Action<TransportSession> onFinished, byte[] data) : base(destination, modem, onFinished)
             {
                 timer = new Timer(modem.protocol.AckTimeout);
                 timer.Elapsed += (sender, e) => ReadyToSend = true;

@@ -1,5 +1,6 @@
 ﻿using B83.Collections;
 using NAudio.Wave;
+using System;
 
 namespace Native_Modem
 {
@@ -11,6 +12,7 @@ namespace Native_Modem
 
         public WaveFormat WaveFormat => waveFormat;
         public int Count => ringBuffer.Count;
+        public Action OnSendOver;
 
         public SampleFIFO(int sampleRate, int size, string saveAudioTo = null)
         {

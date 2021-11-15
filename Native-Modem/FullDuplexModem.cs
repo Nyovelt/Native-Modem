@@ -1,11 +1,11 @@
-﻿using System;
+﻿using NAudio.Wave;
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using NAudio.Wave;
 
 namespace Native_Modem
 {
-    public partial class HalfDuplexModem
+    public partial class FullDuplexModem
     {
         enum ModemState
         {
@@ -24,9 +24,6 @@ namespace Native_Modem
         readonly Action<byte, byte[]> onDataReceived;
         readonly Dictionary<byte, uint> rxSessions;
 
-        //public Protocol Protocol => protocol;
-        //public byte MacAddress => macAddress;
-
         bool disposed;
 
         ModemState state;
@@ -35,7 +32,7 @@ namespace Native_Modem
         /// The parameters of onDataReceived are source address and payload
         /// </summary>
         /// <param name="onDataReceived"></param>
-        public HalfDuplexModem(Protocol protocol, byte macAddress, string driverName, Action<byte, byte[]> onDataReceived, string saveTransportTo = null, string saveRecordTo = null)
+        public FullDuplexModem(Protocol protocol, byte macAddress, string driverName, Action<byte, byte[]> onDataReceived, string saveTransportTo = null, string saveRecordTo = null)
         {
             this.protocol = protocol;
             this.macAddress = macAddress;
@@ -155,7 +152,7 @@ namespace Native_Modem
                             return;
                         }
 
-                        tempStatus = await Rx.DetectFrame(UntilDisposed, 
+                        tempStatus = await Rx.DetectFrame(UntilDisposed,
                             () => TxSessions.TryPeek(out TransportSession currentTxSession) && currentTxSession.ReadyToSend);
                         switch (tempStatus)
                         {
@@ -181,7 +178,7 @@ namespace Native_Modem
 
                         if (frame != null)
                         {
-                            if (!Protocol.Frame.IsValid(frame) || 
+                            if (!Protocol.Frame.IsValid(frame) ||
                                 Protocol.Frame.GetDestination(frame) != macAddress)
                             {
                                 state = ModemState.FrameDetection;
@@ -240,8 +237,8 @@ namespace Native_Modem
                                         }
                                     }
 
-                                    if (ackSeqNum != NO_ACK && 
-                                        (! await Rx.WaitUntilQuiet(UntilDisposed) ||
+                                    if (ackSeqNum != NO_ACK &&
+                                        (!await Rx.WaitUntilQuiet(UntilDisposed) ||
                                         !await Tx.Push(
                                             Protocol.Frame.WrapFrameWithoutData(
                                                 source,

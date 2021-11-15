@@ -5,13 +5,13 @@ namespace Native_Modem
     abstract class TransportSession
     {
         protected readonly byte destination;
-        protected readonly HalfDuplexModem modem;
+        protected readonly FullDuplexModem modem;
         protected readonly Action<TransportSession> onFinished;
 
         public bool ReadyToSend { get; protected set; }
         public Action<string> OnLogInfo;
 
-        public TransportSession(byte destination, HalfDuplexModem modem, Action<TransportSession> onFinished)
+        public TransportSession(byte destination, FullDuplexModem modem, Action<TransportSession> onFinished)
         {
             this.destination = destination;
             this.modem = modem;

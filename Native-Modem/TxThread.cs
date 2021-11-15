@@ -3,7 +3,7 @@ using System.Threading.Tasks;
 
 namespace Native_Modem
 {
-    public partial class HalfDuplexModem
+    public partial class FullDuplexModem
     {
         class TxThread
         {
@@ -52,50 +52,36 @@ namespace Native_Modem
                 return true;
             }
 
-            async Task<bool> PushPhase(int phase, Func<bool> cancel)
-            {
-                if (!await TaskUtilities.WaitUntilUnless(
-                    () => TxFIFO.AvailableFor(protocol.SamplesPerBit), 
-                    () => cancel.Invoke()))
-                {
-                    return false;
-                }
-
-                for (int i = 0; i < protocol.SamplesPerBit; i++)
-                {
-                    TxFIFO.Push(protocol.PhaseLevel[phase]);
-                }
-                return true;
-            }
-
-            async Task<int> PushByte(byte data, int phase, Func<bool> cancel)
+            async Task<(bool, bool)> PushByte(byte data, bool phase, Func<bool> cancel)
             {
                 int levels = Protocol.Convert8To10(data);
                 for (int i = 0; i < 10; i++)
                 {
                     if (((levels >> i) & 0x01) == 0x01)
                     {
-                        phase = (phase + 1) & 0b11;
+                        phase = !phase;
                     }
-                    if (!await PushPhase(phase, cancel))
+                    if (!await PushLevel(phase, cancel))
                     {
-                        return -1;
+                        return (false, phase);
                     }
                 }
-                return phase;
+                return (true, false);
             }
 
-            async Task<int> PushBytes(byte[] data, int phase, Func<bool> cancel)
+            async Task<bool> PushBytes(byte[] data, Func<bool> cancel)
             {
+                bool phase = protocol.StartPhase;
                 foreach (byte dataByte in data)
                 {
-                    phase = await PushByte(dataByte, phase, cancel);
-                    if (phase == -1)
+                    (bool notCanceled, bool newPhase) = await PushByte(dataByte, phase, cancel);
+                    if (!notCanceled)
                     {
-                        return -1;
+                        return false;
                     }
+                    phase = newPhase;
                 }
-                return phase;
+                return true;
             }
 
             public async Task<bool> Push(byte[] frame, Func<bool> cancel)
@@ -105,7 +91,7 @@ namespace Native_Modem
                     return false;
                 }
 
-                if (await PushBytes(frame, protocol.StartPhase, cancel) == -1)
+                if (!await PushBytes(frame, cancel))
                 {
                     return false;
                 }

@@ -3,7 +3,7 @@ using System.Timers;
 
 namespace Native_Modem
 {
-    public partial class HalfDuplexModem
+    public partial class FullDuplexModem
     {
         class MacPingSession : TransportSession
         {
@@ -12,7 +12,7 @@ namespace Native_Modem
             readonly uint seqNum;
             DateTime sendTimestamp;
 
-            public MacPingSession(byte destination, HalfDuplexModem modem, Action<TransportSession> onFinished, double timeout) : base(destination, modem, onFinished)
+            public MacPingSession(byte destination, FullDuplexModem modem, Action<TransportSession> onFinished, double timeout) : base(destination, modem, onFinished)
             {
                 timer = new Timer(timeout);
                 timer.Elapsed += (sender, e) => 

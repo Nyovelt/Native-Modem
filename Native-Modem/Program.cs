@@ -9,7 +9,7 @@ namespace Native_Modem
         [STAThread]
         static void Main()
         {
-            HalfDuplexModemTest(true, true);
+            HalfDuplexModemTest(false, true);
             //SynchronousModemTest(false, false);
             CompareResult();
             Console.ReadLine();

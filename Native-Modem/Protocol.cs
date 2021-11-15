@@ -15,7 +15,7 @@ namespace Native_Modem
     /// length (8 bits) | 
     /// payload (0 - max bytes) | 
     /// crc32 (32 bits) ]
-    /// MLT-3 & 4B5B
+    /// 4B5B
     /// </summary>
     public class Protocol
     {
@@ -109,8 +109,7 @@ namespace Native_Modem
         }
 
         public BitArray Preamble { get; }
-        public float[] PhaseLevel { get; }
-        public int StartPhase { get; }
+        public bool StartPhase { get; }
         public int IPGBits { get; }
         public float[] ClockSync { get; }
         public float ClockSyncPowerThreshold { get; }
@@ -125,8 +124,6 @@ namespace Native_Modem
         public int QuietCriteria { get; }
         public double AckTimeout { get; }
 
-        readonly float powerThreshold;
-
         const float syncPowerThreshold = 0.5f;
 
         public Protocol(float amplitude,int sampleRate, int samplesPerBit, byte maxPayloadSize, bool useStereo, double ackTimeout)
@@ -134,8 +131,7 @@ namespace Native_Modem
             // preamble 32 bits: 10101010 10101010 10101010 10101011
             Preamble = new BitArray(new byte[4] { 0x55, 0x55, 0x55, 0xD5 });
             IPGBits = 16;
-            PhaseLevel = new float[4] { -amplitude, 0f, amplitude, 0f };
-            StartPhase = 0;
+            StartPhase = false;
 
             ClockSync = new float[8 * samplesPerBit];
             int counter = 0;
@@ -159,45 +155,19 @@ namespace Native_Modem
             UseStereo = useStereo;
             QuietCriteria = IPGBits >> 1 * SamplesPerBit;
             AckTimeout = ackTimeout;
-
-            powerThreshold = Threshold * samplesPerBit;
         }
 
-        public bool GetBit(float power, ref int phase)
+        public bool GetBit(float power, ref bool phase)
         {
-            bool bit;
-            if (power > powerThreshold)
+            bool newPhase = power > 0f;
+            if (newPhase != phase)
             {
-                bit = phase == 1;
-#if THROW_PHASE_ERROR
-                if (!bit && phase != 2)
-                {
-                    throw new System.Exception($"Phase jumped to high! previously: {(phase == 0 ? "low" : "drop")}");
-                }
-#endif
-                phase = 2;
-                return bit;
-            }
-            else if (power > -powerThreshold)
-            {
-                bit = phase == 0 || phase == 2;
-                if (bit)
-                {
-                    phase++;
-                }
-                return bit;
+                phase = newPhase;
+                return true;
             }
             else
             {
-                bit = phase == 3;
-#if THROW_PHASE_ERROR
-                if (!bit && phase != 0)
-                {
-                    throw new System.Exception($"Phase jumped to low! previously: {(phase == 1 ? "rise" : "high")}");
-                }
-#endif
-                phase = 0;
-                return bit;
+                return false;
             }
         }
     }
