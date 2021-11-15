@@ -16,8 +16,8 @@ namespace Native_Modem
             }
             readonly Protocol protocol;
 
-            public SampleFIFO RxFIFO { get; }
             public bool IsQuiet { get; private set; }
+            public Action OnQuiet;
             public Action<byte[]> OnFrameReceived;
 
             RxState state;
@@ -42,11 +42,10 @@ namespace Native_Modem
             int bytesDecoded;
             bool phase;
 
-            public RxThread(Protocol protocol, int bufferSize, string saveAudioTo = null)
+            public RxThread(Protocol protocol)
             {
                 this.protocol = protocol;
 
-                RxFIFO = new SampleFIFO(protocol.SampleRate, bufferSize, saveAudioTo);
                 IsQuiet = false;
 
                 quietCounter = 0;
@@ -62,16 +61,11 @@ namespace Native_Modem
                 state = RxState.WaitingForQuiet;
             }
 
-            public void Dispose()
-            {
-                RxFIFO.Dispose();
-            }
-
             public void ProccessSamples(float[] buffer, int count)
             {
                 for (int i = 0; i < count; i++)
                 {
-                    float sample = buffer[count];
+                    float sample = buffer[i];
                     if (MathF.Abs(sample) < protocol.Threshold)
                     {
                         if (!IsQuiet)
@@ -80,7 +74,7 @@ namespace Native_Modem
                             if (quietCounter >= protocol.QuietCriteria)
                             {
                                 IsQuiet = true;
-                                state = RxState.Syncing;
+                                OnQuiet?.Invoke();
                             }
                         }
                     }
@@ -242,7 +236,7 @@ namespace Native_Modem
                         sum += samples[sampleCount++];
                     }
 
-                    if (protocol.GetBit(sum, ref phase))
+                    if (Protocol.GetBit(sum, ref phase))
                     {
                         raw |= 0x1 << i;
                     }

@@ -12,7 +12,7 @@ namespace Native_Modem
 
         public WaveFormat WaveFormat => waveFormat;
         public int Count => ringBuffer.Count;
-        public Action OnSendOver;
+        public Action OnReadToEmpty;
 
         public SampleFIFO(int sampleRate, int size, string saveAudioTo = null)
         {
@@ -52,30 +52,6 @@ namespace Native_Modem
             }
         }
 
-        public void Push(float[] sampleBuffer, int count)
-        {
-            for (int i = 0; i < count; i++)
-            {
-                ringBuffer.Add(sampleBuffer[i]);
-            }
-            if (writer != null)
-            {
-                writer.WriteSamples(sampleBuffer, 0, count);
-            }
-        }
-
-        public void PushStereo(float[] sampleBuffer, int count)
-        {
-            for (int i = 0; i < count; i += 2)
-            {
-                ringBuffer.Add(sampleBuffer[i] * 0.5f + sampleBuffer[i + 1] * 0.5f);
-            }
-            if (writer != null)
-            {
-                writer.WriteSamples(sampleBuffer, 0, count);
-            }
-        }
-
         public float Pop()
         {
             return ringBuffer.ReadAndRemoveNext();
@@ -83,18 +59,23 @@ namespace Native_Modem
 
         public int Read(float[] buffer, int offset, int count)
         {
+            if (ringBuffer.Count == 0)
+            {
+                return 0;
+            }
+
             int samples = ringBuffer.Count > count ? count : ringBuffer.Count;
-            int c = 0;
-            for (; c < samples; c++)
+            for (int c = 0; c < samples; c++)
             {
                 buffer[offset + c] = ringBuffer.ReadAndRemoveNext();
             }
-            for (; c < count; c++)
+
+            if (ringBuffer.Count == 0)
             {
-                buffer[offset + c] = 0f;
+                OnReadToEmpty?.Invoke();
             }
 
-            return count;
+            return samples;
         }
     }
 }

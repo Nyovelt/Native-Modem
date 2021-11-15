@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 
 namespace Native_Modem
@@ -8,95 +9,102 @@ namespace Native_Modem
         class TxThread
         {
             readonly Protocol protocol;
+            readonly RxThread Rx;
 
-            public SampleFIFO TxFIFO { get; }
+            public readonly SampleFIFO TxFIFO;
+            readonly Queue<(byte[], Action)> pending;
+
+            public bool Sending { get; private set; }
             
-            public TxThread(Protocol protocol, int bufferSize, string saveAudioTo = null)
+            public TxThread(Protocol protocol, RxThread Rx, int bufferSize, string saveAudioTo = null)
             {
                 this.protocol = protocol;
+                this.Rx = Rx;
 
                 TxFIFO = new SampleFIFO(protocol.SampleRate, bufferSize, saveAudioTo);
+                pending = new Queue<(byte[], Action)>();
+
+                Sending = false;
+
+                Rx.OnQuiet += TrySend;
             }
 
             public void Dispose()
             {
+                Rx.OnQuiet -= TrySend;
+
                 TxFIFO.Dispose();
             }
 
-            async Task<bool> PushLevel(bool high, Func<bool> cancel)
+            void PushLevel(bool high)
             {
-                if (!await TaskUtilities.WaitUntilUnless(
-                    () => TxFIFO.AvailableFor(protocol.SamplesPerBit), 
-                    () => cancel.Invoke()))
-                {
-                    return false;
-                }
-
                 float sample = high ? protocol.Amplitude : -protocol.Amplitude;
                 for (int i = 0; i < protocol.SamplesPerBit; i++)
                 {
                     TxFIFO.Push(sample);
                 }
-                return true;
             }
 
-            async Task<bool> PushPreamble(Func<bool> cancel)
+            void PushPreamble()
             {
                 foreach (bool high in protocol.Preamble)
                 {
-                    if (!await PushLevel(high, cancel))
-                    {
-                        return false;
-                    }
+                    PushLevel(high);
                 }
-                return true;
             }
 
-            async Task<(bool, bool)> PushByte(byte data, bool phase, Func<bool> cancel)
-            {
-                int levels = Protocol.Convert8To10(data);
-                for (int i = 0; i < 10; i++)
-                {
-                    if (((levels >> i) & 0x01) == 0x01)
-                    {
-                        phase = !phase;
-                    }
-                    if (!await PushLevel(phase, cancel))
-                    {
-                        return (false, phase);
-                    }
-                }
-                return (true, false);
-            }
-
-            async Task<bool> PushBytes(byte[] data, Func<bool> cancel)
+            void PushFrame(byte[] frame)
             {
                 bool phase = protocol.StartPhase;
-                foreach (byte dataByte in data)
+                foreach (byte dataByte in frame)
                 {
-                    (bool notCanceled, bool newPhase) = await PushByte(dataByte, phase, cancel);
-                    if (!notCanceled)
+                    int levels = Protocol.Convert8To10(dataByte);
+                    for (int i = 0; i < 10; i++)
                     {
-                        return false;
+                        if (((levels >> i) & 0x01) == 0x01)
+                        {
+                            phase = !phase;
+                        }
+                        PushLevel(phase);
                     }
-                    phase = newPhase;
                 }
-                return true;
             }
 
-            public async Task<bool> Push(byte[] frame, Func<bool> cancel)
+            void PushFrameWithPreamble(byte[] frame)
             {
-                if (!await PushPreamble(cancel))
+                int sampleCount = frame.Length * protocol.SamplesPerTenBits + protocol.PreambleSampleCount;
+                if (!TxFIFO.AvailableFor(sampleCount))
                 {
-                    return false;
+                    throw new Exception("Tx buffer overflow!");
                 }
 
-                if (!await PushBytes(frame, cancel))
-                {
-                    return false;
-                }
+                PushPreamble();
+                PushFrame(frame);
+            }
 
-                return await TaskUtilities.WaitForUnless(TxFIFO.Count * 1000 / protocol.SampleRate, cancel);
+            void OnSendOver()
+            {
+                pending.Dequeue().Item2?.Invoke();
+                Sending = false;
+                TxFIFO.OnReadToEmpty -= OnSendOver;
+
+                TrySend();
+            }
+
+            void TrySend()
+            {
+                if (!Sending && Rx.IsQuiet && pending.TryPeek(out (byte[], Action) next))
+                {
+                    Sending = true;
+                    TxFIFO.OnReadToEmpty += OnSendOver;
+                    PushFrameWithPreamble(next.Item1);
+                }
+            }
+
+            public void TransportFrame(byte[] frame, Action onFrameSent)
+            {
+                pending.Enqueue((frame, onFrameSent));
+                TrySend();
             }
         }
     }

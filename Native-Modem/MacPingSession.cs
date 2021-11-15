@@ -12,13 +12,13 @@ namespace Native_Modem
             readonly uint seqNum;
             DateTime sendTimestamp;
 
-            public MacPingSession(byte destination, FullDuplexModem modem, Action<TransportSession> onFinished, double timeout) : base(destination, modem, onFinished)
+            public MacPingSession(byte destination, FullDuplexModem modem, Action<byte[], Action> sendFrame, Action<TransportSession> onFinished, double timeout) : base(destination, modem, sendFrame, onFinished)
             {
                 timer = new Timer(timeout);
                 timer.Elapsed += (sender, e) => 
                 {
                     OnLogInfo?.Invoke("Timeout!");
-                    onFinished.Invoke(this);
+                    onFinished?.Invoke(this);
                 };
 
                 seqNum = Protocol.Frame.RandomSequenceNumber();
@@ -27,13 +27,14 @@ namespace Native_Modem
                     modem.macAddress, 
                     Protocol.FrameType.MacPing_Req, 
                     seqNum);
-
-                ReadyToSend = true;
             }
 
             public override void OnSessionActivated()
             {
                 OnLogInfo?.Invoke($"Start pinging {destination}...");
+                sendTimestamp = DateTime.Now;
+                timer.Start();
+                sendFrame.Invoke(frame, null);
             }
 
             public override void OnReceiveFrame(byte src_addr, Protocol.FrameType type, uint seqNum)
@@ -48,15 +49,13 @@ namespace Native_Modem
                     timer.Stop();
                     DateTime receiveTimestamp = DateTime.Now;
                     OnLogInfo?.Invoke($"RTT = {(receiveTimestamp - sendTimestamp).TotalMilliseconds}ms");
-                    onFinished.Invoke(this);
+                    onFinished?.Invoke(this);
                 }
             }
 
-            public override byte[] OnGetFrame()
+            public override void OnInterrupted()
             {
-                ReadyToSend = false;
-                sendTimestamp = DateTime.Now;
-                return frame;
+                timer.Stop();
             }
         }
     }

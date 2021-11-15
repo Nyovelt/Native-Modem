@@ -12,10 +12,10 @@ namespace Native_Modem
             readonly Queue<byte[]> framesPending;
             uint lastAck;
 
-            public DataTransportSession(byte destination, FullDuplexModem modem, Action<TransportSession> onFinished, byte[] data) : base(destination, modem, onFinished)
+            public DataTransportSession(byte destination, FullDuplexModem modem, Action<byte[], Action> sendFrame, Action<TransportSession> onFinished, byte[] data) : base(destination, modem, sendFrame, onFinished)
             {
                 timer = new Timer(modem.protocol.AckTimeout);
-                timer.Elapsed += (sender, e) => ReadyToSend = true;
+                timer.Elapsed += (sender, e) => SendFrame();
                 framesPending = new Queue<byte[]>();
                 lastAck = Protocol.Frame.RandomSequenceNumber();
 
@@ -61,13 +61,12 @@ namespace Native_Modem
                     modem.macAddress,
                     Protocol.FrameType.Data_End,
                     seqCounter));
-
-                ReadyToSend = true;
             }
 
             public override void OnSessionActivated()
             {
                 OnLogInfo?.Invoke($"Start sending {framesPending.Count} frames to {destination}...");
+                SendFrame();
             }
 
             public override void OnReceiveFrame(byte src_addr, Protocol.FrameType type, uint seqNum)
@@ -79,7 +78,7 @@ namespace Native_Modem
 
                 if (framesPending.Count == 0)
                 {
-                    onFinished.Invoke(this);
+                    onFinished?.Invoke(this);
                     return;
                 }
 
@@ -93,25 +92,24 @@ namespace Native_Modem
                     if (framesPending.Count == 0)
                     {
                         OnLogInfo?.Invoke($"All frames sent successfully.");
-                        onFinished.Invoke(this);
+                        onFinished?.Invoke(this);
                     }
                     else
                     {
-                        ReadyToSend = true;
+                        SendFrame();
                     }
                 }
             }
 
-            public override byte[] OnGetFrame()
+            public override void OnInterrupted()
             {
-                ReadyToSend = false;
-                Console.WriteLine("Sending!");
-                return framesPending.Peek();
+                timer.Stop();
             }
 
-            public override void OnFrameSent()
+            void SendFrame()
             {
-                timer.Start();
+                Console.WriteLine("Sending!");
+                sendFrame.Invoke(framesPending.Peek(), () => timer.Start());
             }
         }
     }

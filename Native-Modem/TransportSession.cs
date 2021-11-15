@@ -7,24 +7,22 @@ namespace Native_Modem
         protected readonly byte destination;
         protected readonly FullDuplexModem modem;
         protected readonly Action<TransportSession> onFinished;
+        protected readonly Action<byte[], Action> sendFrame;
 
-        public bool ReadyToSend { get; protected set; }
         public Action<string> OnLogInfo;
 
-        public TransportSession(byte destination, FullDuplexModem modem, Action<TransportSession> onFinished)
+        public TransportSession(byte destination, FullDuplexModem modem, Action<byte[], Action> sendFrame, Action<TransportSession> onFinished)
         {
             this.destination = destination;
             this.modem = modem;
+            this.sendFrame = sendFrame;
             this.onFinished = onFinished;
-            ReadyToSend = false;
         }
 
         public virtual void OnSessionActivated() { }
 
         public virtual void OnReceiveFrame(byte src_addr, Protocol.FrameType type, uint seqNum) { }
 
-        public abstract byte[] OnGetFrame();
-
-        public virtual void OnFrameSent() { }
+        public virtual void OnInterrupted() { }
     }
 }
