@@ -50,9 +50,9 @@ namespace Native_Modem
 
             void PushPreamble()
             {
-                foreach (bool high in protocol.Preamble)
+                for (int i = 31; i >= 0; i--)
                 {
-                    PushLevel(high);
+                    PushLevel(((protocol.SFD >> i) & 0x1) == 0x1);
                 }
             }
 
@@ -79,7 +79,7 @@ namespace Native_Modem
                 {
                     Console.WriteLine("TxFIFO not empty when writing frame!!!!!!!!!!!!!");
                 }
-                int sampleCount = frame.Length * protocol.SamplesPerTenBits + protocol.PreambleSampleCount;
+                int sampleCount = frame.Length * protocol.SamplesPerTenBits + protocol.SFDSampleCount;
                 if (!TxFIFO.AvailableFor(sampleCount))
                 {
                     throw new Exception("Tx buffer overflow!");

@@ -108,13 +108,9 @@ namespace Native_Modem
             }
         }
 
-        public BitArray Preamble { get; }
-        public int PreambleSampleCount { get; }
-
+        public uint SFD { get; }
+        public int SFDSampleCount { get; }
         public bool StartPhase { get; }
-        public float[] ClockSync { get; }
-        public float ClockSyncPowerThreshold { get; }
-        public byte SFDByte { get; }
 
         public float Amplitude { get; }
         public float Threshold { get; }
@@ -130,30 +126,16 @@ namespace Native_Modem
         public double AckTimeout { get; }
         public int MaxRetransmit { get; }
 
-        const float syncPowerThreshold = 0.5f;
-
         public Protocol(float amplitude,int sampleRate, int samplesPerBit, byte maxPayloadSize, double ackTimeout, int maxRetransmit)
         {
-            // preamble 32 bits: 10101010 10101010 10101010 10101011
-            Preamble = new BitArray(new byte[4] { 0x55, 0x55, 0x55, 0xD5 });
-            PreambleSampleCount = Preamble.Count * samplesPerBit;
+            // preamble(SFD) 32 bits: 10101010 10101010 10101010 10101011
+            SFD = 0xAAAAAAAB;
+            SFDSampleCount = 32 * samplesPerBit;
             StartPhase = false;
 
-            ClockSync = new float[8 * samplesPerBit];
-            int counter = 0;
-            foreach (bool bit in new BitArray(new byte[1] { 0x55 }))
-            {
-                float sample = bit ? amplitude : -amplitude;
-                for (int i = 0; i < samplesPerBit; i++)
-                {
-                    ClockSync[counter++] = sample;
-                }
-            }
-            ClockSyncPowerThreshold = amplitude * amplitude * counter * syncPowerThreshold;
-            SFDByte = 171;
-
             Amplitude = amplitude;
-            Threshold = amplitude * 0.4f;
+            Threshold = amplitude * 0.3f;
+
             SampleRate = sampleRate;
             SamplesPerBit = samplesPerBit;
             SamplesPerTenBits = samplesPerBit * 10;

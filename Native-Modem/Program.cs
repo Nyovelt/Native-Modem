@@ -45,7 +45,7 @@ namespace Native_Modem
         static void FullDuplexModemTest(bool recordTx, bool recordRx)
         {
             Protocol protocol = new Protocol(
-                amplitude: 0.02f,
+                amplitude: 0.05f,
                 sampleRate: 48000,
                 samplesPerBit: 2,
                 maxPayloadSize: 128,

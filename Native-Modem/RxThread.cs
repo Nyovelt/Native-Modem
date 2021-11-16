@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using B83.Collections;
 
 namespace Native_Modem
 {
@@ -11,6 +10,7 @@ namespace Native_Modem
             enum RxState
             {
                 WaitingForQuiet,
+                WaitingForSync,
                 Syncing,
                 Demodulating
             }
@@ -24,15 +24,8 @@ namespace Native_Modem
             int quietCounter;
 
             //Frame detection
-            readonly int syncWaitSamples;
-            readonly int waitSFDTimeout;
-            readonly RingBuffer<float> syncBuffer;
             readonly List<float> syncBitBuffer;
-            bool syncing;
-            bool detected;
-            float localMax;
-            int waitSFDCount;
-            byte syncBits;
+            uint syncBits;
 
             //Frame demodulation
             readonly List<float> byteSampleBuffer;
@@ -49,9 +42,6 @@ namespace Native_Modem
 
                 quietCounter = 0;
 
-                syncWaitSamples = protocol.SamplesPerBit - 1;
-                waitSFDTimeout = protocol.Preamble.Count;
-                syncBuffer = new RingBuffer<float>(protocol.ClockSync.Length);
                 syncBitBuffer = new List<float>(protocol.SamplesPerBit);
 
                 byteSampleBuffer = new List<float>(protocol.SamplesPerTenBits);
@@ -65,6 +55,7 @@ namespace Native_Modem
                 for (int i = 0; i < count; i++)
                 {
                     float sample = buffer[i];
+
                     if (MathF.Abs(sample) < protocol.Threshold)
                     {
                         if (!IsQuiet)
@@ -76,7 +67,7 @@ namespace Native_Modem
                             }
                         }
                     }
-                    else if (IsQuiet)
+                    else
                     {
                         IsQuiet = false;
                         quietCounter = 0;
@@ -87,17 +78,40 @@ namespace Native_Modem
                         case RxState.WaitingForQuiet:
                             if (IsQuiet)
                             {
+                                state = RxState.WaitingForSync;
+                            }
+                            break;
+
+                        case RxState.WaitingForSync:
+                            if (!IsQuiet)
+                            {
                                 state = RxState.Syncing;
-                                OnEnterSyncing();
+                                syncBitBuffer.Clear();
+                                syncBitBuffer.Add(sample);
+                                syncBits = 0;
                             }
                             break;
 
                         case RxState.Syncing:
-                            ProcessSyncing(sample);
+                            if (IsQuiet)
+                            {
+                                state = RxState.WaitingForSync;
+                            }
+                            else
+                            {
+                                ProcessSyncing(sample);
+                            }
                             break;
 
                         case RxState.Demodulating:
-                            ProcessDemodulating(sample);
+                            if (IsQuiet)
+                            {
+                                state = RxState.WaitingForSync;
+                            }
+                            else
+                            {
+                                ProcessDemodulating(sample);
+                            }
                             break;
                     }
                 }
@@ -105,56 +119,23 @@ namespace Native_Modem
 
             void ProcessSyncing(float sample)
             {
-                syncBuffer.Add(sample);
-                if (syncing)
+                syncBitBuffer.Add(sample);
+                if (syncBitBuffer.Count == protocol.SamplesPerBit)
                 {
-                    float syncPower = 0f;
-                    for (int i = 0; i < protocol.ClockSync.Length; i++)
+                    syncBits <<= 1;
+                    if (DetectLevel(syncBitBuffer))
                     {
-                        syncPower += syncBuffer[i] * protocol.ClockSync[i];
+                        syncBits |= 0x1;
                     }
+                    syncBitBuffer.Clear();
 
-                    if (syncPower > protocol.ClockSyncPowerThreshold && syncPower > localMax)
+                    if (syncBits == protocol.SFD)
                     {
-                        localMax = syncPower;
-                        detected = true;
-                        syncBitBuffer.Clear();
-                    }
-                    else if (detected)
-                    {
-                        syncBitBuffer.Add(sample);
-                        if (syncBitBuffer.Count >= syncWaitSamples)
-                        {
-                            localMax = 0f;
-                            syncing = false;
-                            syncBits = 0;
-                            waitSFDCount = 0;
-                            detected = false;
-                        }
-                    }
-                }
-                else
-                {
-                    syncBitBuffer.Add(sample);
-                    if (syncBitBuffer.Count == protocol.SamplesPerBit)
-                    {
-                        syncBits <<= 1;
-                        if (DetectLevel(syncBitBuffer))
-                        {
-                            syncBits |= 0x1;
-                        }
-                        syncBitBuffer.Clear();
-                        waitSFDCount++;
-
-                        if (syncBits == protocol.SFDByte)
-                        {
-                            state = RxState.Demodulating;
-                            OnEnterDemodulating();
-                        }
-                        else if (waitSFDCount >= waitSFDTimeout)
-                        {
-                            state = RxState.WaitingForQuiet;
-                        }
+                        state = RxState.Demodulating;
+                        frameBuffer = null;
+                        bytesDecoded = 0;
+                        phase = protocol.StartPhase;
+                        byteSampleBuffer.Clear();
                     }
                 }
             }
@@ -173,6 +154,7 @@ namespace Native_Modem
                         {
                             if (headerBuffer[3] > protocol.FrameMaxDataBytes)
                             {
+                                Console.WriteLine("Invalid frame length!");
                                 state = RxState.WaitingForQuiet;
                             }
                             else
@@ -194,30 +176,12 @@ namespace Native_Modem
                 }
             }
 
-            void OnEnterSyncing()
-            {
-                syncing = true;
-                detected = false;
-                localMax = 0f;
-                waitSFDCount = 0;
-                syncBits = 0;
-                syncBuffer.FillWith(0f);
-            }
-
-            void OnEnterDemodulating()
-            {
-                frameBuffer = null;
-                bytesDecoded = 0;
-                phase = protocol.StartPhase;
-                byteSampleBuffer.Clear();
-            }
-
             bool DetectLevel(List<float> samples)
             {
                 float sum = 0f;
-                for (int i = 0; i < protocol.SamplesPerBit; i++)
+                foreach (float sample in samples)
                 {
-                    sum += samples[i];
+                    sum += sample;
                 }
                 return sum > 0f;
             }

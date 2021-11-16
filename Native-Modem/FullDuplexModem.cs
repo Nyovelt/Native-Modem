@@ -129,6 +129,7 @@ namespace Native_Modem
             if (!Protocol.Frame.IsValid(frame) ||
                 Protocol.Frame.GetDestination(frame) != macAddress)
             {
+                Console.WriteLine("Invalid frame received!");
                 return;
             }
 
