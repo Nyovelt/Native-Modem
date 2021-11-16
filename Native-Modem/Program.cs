@@ -45,11 +45,11 @@ namespace Native_Modem
         static void FullDuplexModemTest(bool recordTx, bool recordRx)
         {
             Protocol protocol = new Protocol(
-                amplitude: 0.05f,
+                amplitude: 0.1f,
                 sampleRate: 48000,
                 samplesPerBit: 2,
                 maxPayloadSize: 128,
-                ackTimeout: 120);
+                ackTimeout: 150);
             string driverName = SelectAsioDriver();
             Console.WriteLine("Do you want to configure the control panel? (y/n)");
             if (char.TryParse(Console.ReadLine(), out char c))
@@ -104,10 +104,10 @@ namespace Native_Modem
             byte[] input = inputStream.ReadBytes((int)inputStream.BaseStream.Length);
             inputStream.Close();
             modem.TransportData((byte)destination, input);
-            //for (int i = 0; i < 10; i++)
-            //{
-            //    modem.MacPing((byte)destination, 200d);
-            //}
+            for (int i = 0; i < 10; i++)
+            {
+                modem.MacPing((byte)destination, 200d);
+            }
 
             Console.WriteLine("Press enter to stop modem...");
             Console.ReadLine();
