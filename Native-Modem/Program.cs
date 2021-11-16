@@ -48,22 +48,11 @@ namespace Native_Modem
                 amplitude: 0.05f,
                 sampleRate: 48000,
                 samplesPerBit: 2,
-                maxPayloadSize: 128,
-                ackTimeout: 200,
-                maxRetransmit: 8);
-            string driverName = AsioUtilities.SelectAsioDriver();
-            Console.WriteLine("Do you want to configure the control panel? (y/n)");
-            if (char.TryParse(Console.ReadLine(), out char c))
-            {
-                if (c == 'y')
-                {
-                    AsioDriver driver = AsioDriver.GetAsioDriverByName(driverName);
-                    driver.ControlPanel();
-                    Console.WriteLine("Press enter after setup the control panel");
-                    Console.ReadLine();
-                    driver.ReleaseComAsioDriver();
-                }
-            }
+                maxPayloadSize: 252,
+                ackTimeout: 150,
+                maxRetransmit: 8,
+                delayMilliseconds: 2,
+                clockAfterFrame: 256);
 
             Console.WriteLine("Please enter your MAC address (in decimal): ");
             int address;
@@ -80,7 +69,6 @@ namespace Native_Modem
 
             FullDuplexModem modem = new FullDuplexModem(protocol, 
                 (byte)address, 
-                driverName,
                 (source, data) =>
                 {
                     Console.WriteLine($"Received frame {frameCount} from {source}");

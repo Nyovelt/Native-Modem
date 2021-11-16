@@ -1,19 +1,19 @@
 ﻿using NAudio.Wave;
+using NAudio.CoreAudioApi;
 using System;
 using System.Collections.Generic;
-using System.Threading.Tasks;
 
 namespace Native_Modem
 {
     public partial class FullDuplexModem
     {
         readonly Protocol protocol;
-        readonly AsioOut asioOut;
+        readonly WasapiOut wasapiOut;
+        readonly WasapiCapture wasapiCapture;
         readonly TxThread Tx;
         readonly RxThread Rx;
         readonly Queue<TransportSession> TxSessions;
         readonly byte macAddress;
-        readonly float[] RxBuffer;
         readonly Action<byte, byte[]> onDataReceived;
         readonly Dictionary<byte, uint> rxSessions;
         readonly WaveFileWriter recordWriter;
@@ -22,7 +22,7 @@ namespace Native_Modem
         /// The parameters of onDataReceived are source address and payload
         /// </summary>
         /// <param name="onDataReceived"></param>
-        public FullDuplexModem(Protocol protocol, byte macAddress, string driverName, Action<byte, byte[]> onDataReceived, string saveTransportTo = null, string saveRecordTo = null)
+        public FullDuplexModem(Protocol protocol, byte macAddress, Action<byte, byte[]> onDataReceived, string saveTransportTo = null, string saveRecordTo = null)
         {
             this.protocol = protocol;
             this.macAddress = macAddress;
@@ -34,11 +34,18 @@ namespace Native_Modem
 
             rxSessions = new Dictionary<byte, uint>();
 
-            asioOut = new AsioOut(driverName);
-            AsioUtilities.SetupAsioOut(asioOut);
-            asioOut.InitRecordAndPlayback(Tx.TxFIFO.ToWaveProvider(), 1, protocol.SampleRate);
+            wasapiOut = new WasapiOut(
+                device: WasapiUtilities.SelectOutputDevice(), 
+                shareMode: AudioClientShareMode.Exclusive,
+                useEventSync: true,
+                latency: protocol.Delay);
+            wasapiOut.Init(Tx.TxFIFO);
+            wasapiOut.Volume = 1f;
 
-            RxBuffer = new float[asioOut.FramesPerBuffer];
+            wasapiCapture = new WasapiCapture(
+                captureDevice: WasapiUtilities.SelectInputDevice(),
+                useEventSync: true,
+                audioBufferMillisecondsLength: protocol.Delay);
 
             if (!string.IsNullOrEmpty(saveRecordTo))
             {
@@ -49,8 +56,9 @@ namespace Native_Modem
                 recordWriter = null;
             }
 
-            asioOut.AudioAvailable += OnRxSamplesAvailable;
-            asioOut.Play();
+            wasapiCapture.DataAvailable += OnRxSamplesAvailable;
+            wasapiOut.Play();
+            wasapiCapture.StartRecording();
 
             Rx.OnFrameReceived += OnFrameReceived;
         }
@@ -64,12 +72,14 @@ namespace Native_Modem
 
             Rx.OnFrameReceived -= OnFrameReceived;
 
-            asioOut.Stop();
-            asioOut.AudioAvailable -= OnRxSamplesAvailable;
+            wasapiCapture.DataAvailable -= OnRxSamplesAvailable;
+            wasapiOut.Stop();
+            wasapiCapture.StopRecording();
 
             recordWriter?.Dispose();
 
-            asioOut.Dispose();
+            wasapiOut.Dispose();
+            wasapiCapture.Dispose();
             Tx.Dispose();
         }
 
@@ -93,11 +103,10 @@ namespace Native_Modem
             }
         }
 
-        void OnRxSamplesAvailable(object sender, AsioAudioAvailableEventArgs e)
+        void OnRxSamplesAvailable(object sender, WaveInEventArgs e)
         {
-            int sampleCount = e.GetAsInterleavedSamples(RxBuffer);
-            Rx.ProccessSamples(RxBuffer, sampleCount);
-            recordWriter?.WriteSamples(RxBuffer, 0, sampleCount);
+            Rx.ProcessData(e.Buffer, e.BytesRecorded);
+            recordWriter?.Write(e.Buffer, 0, e.BytesRecorded);
         }
 
         void OnTxSessionFinished(TransportSession session)

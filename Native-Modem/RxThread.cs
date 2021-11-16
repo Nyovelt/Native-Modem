@@ -50,70 +50,81 @@ namespace Native_Modem
                 state = RxState.WaitingForQuiet;
             }
 
+            public void ProcessData(byte[] data, int length)
+            {
+                for (int i = 0; i < length; i += 4)
+                {
+                    ProcessSample(BitConverter.ToSingle(data, i));
+                }
+            }
+
             public void ProccessSamples(float[] buffer, int count)
             {
                 for (int i = 0; i < count; i++)
                 {
-                    float sample = buffer[i];
+                    ProcessSample(buffer[i]);
+                }
+            }
 
-                    if (MathF.Abs(sample) < protocol.Threshold)
+            void ProcessSample(float sample)
+            {
+                if (MathF.Abs(sample) < protocol.Threshold)
+                {
+                    if (!IsQuiet)
                     {
-                        if (!IsQuiet)
+                        quietCounter++;
+                        if (quietCounter >= protocol.QuietCriteria)
                         {
-                            quietCounter++;
-                            if (quietCounter >= protocol.QuietCriteria)
-                            {
-                                IsQuiet = true;
-                            }
+                            IsQuiet = true;
                         }
                     }
-                    else
-                    {
-                        IsQuiet = false;
-                        quietCounter = 0;
-                    }
+                }
+                else
+                {
+                    IsQuiet = false;
+                    quietCounter = 0;
+                }
 
-                    switch (state)
-                    {
-                        case RxState.WaitingForQuiet:
-                            if (IsQuiet)
-                            {
-                                state = RxState.WaitingForSync;
-                            }
-                            break;
+                switch (state)
+                {
+                    case RxState.WaitingForQuiet:
+                        if (IsQuiet)
+                        {
+                            state = RxState.WaitingForSync;
+                        }
+                        break;
 
-                        case RxState.WaitingForSync:
-                            if (!IsQuiet)
-                            {
-                                state = RxState.Syncing;
-                                syncBitBuffer.Clear();
-                                syncBitBuffer.Add(sample);
-                                syncBits = 0;
-                            }
-                            break;
+                    case RxState.WaitingForSync:
+                        if (!IsQuiet)
+                        {
+                            state = RxState.Syncing;
+                            syncBitBuffer.Clear();
+                            syncBitBuffer.Add(sample);
+                            syncBits = 0;
+                        }
+                        break;
 
-                        case RxState.Syncing:
-                            if (IsQuiet)
-                            {
-                                state = RxState.WaitingForSync;
-                            }
-                            else
-                            {
-                                ProcessSyncing(sample);
-                            }
-                            break;
+                    case RxState.Syncing:
+                        if (IsQuiet)
+                        {
+                            state = RxState.WaitingForSync;
+                        }
+                        else
+                        {
+                            ProcessSyncing(sample);
+                        }
+                        break;
 
-                        case RxState.Demodulating:
-                            if (IsQuiet)
-                            {
-                                state = RxState.WaitingForSync;
-                            }
-                            else
-                            {
-                                ProcessDemodulating(sample);
-                            }
-                            break;
-                    }
+                    case RxState.Demodulating:
+                        if (IsQuiet)
+                        {
+                            state = RxState.WaitingForSync;
+                        }
+                        else
+                        {
+                            ProcessDemodulating(sample);
+                        }
+                        break;
                 }
             }
 
