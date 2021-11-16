@@ -11,13 +11,19 @@ namespace Native_Modem
             readonly Timer timer;
             readonly Queue<byte[]> framesPending;
             uint lastAck;
+            int tries;
 
-            public DataTransportSession(byte destination, FullDuplexModem modem, Action<byte[], Action> sendFrame, Action<TransportSession> onFinished, byte[] data) : base(destination, modem, sendFrame, onFinished)
+            public DataTransportSession(byte destination, FullDuplexModem modem, Action<byte[], Action<bool>> sendFrame, Action<TransportSession> onFinished, byte[] data) : base(destination, modem, sendFrame, onFinished)
             {
                 timer = new Timer(modem.protocol.AckTimeout);
-                timer.Elapsed += (sender, e) => SendFrame();
+                timer.AutoReset = false;
+                timer.Elapsed += (sender, e) =>
+                {
+                    FailTransmit();
+                };
                 framesPending = new Queue<byte[]>();
                 lastAck = Protocol.Frame.RandomSequenceNumber();
+                tries = 0;
 
                 int fullFrames = data.Length / modem.protocol.FrameMaxDataBytes;
                 int byteCounter = 0;
@@ -96,6 +102,7 @@ namespace Native_Modem
                     }
                     else
                     {
+                        tries = 0;
                         SendFrame();
                     }
                 }
@@ -109,7 +116,31 @@ namespace Native_Modem
             void SendFrame()
             {
                 Console.WriteLine("Sending!");
-                sendFrame.Invoke(framesPending.Peek(), () => timer.Start());
+                tries++;
+                sendFrame.Invoke(framesPending.Peek(), success =>
+                {
+                    if (success)
+                    {
+                        timer.Start();
+                    }
+                    else
+                    {
+                        FailTransmit();
+                    }
+                });
+            }
+
+            void FailTransmit()
+            {
+                if (tries > modem.protocol.MaxRetransmit)
+                {
+                    OnLogInfo?.Invoke("Transmit failed! Please check the link, or the destination.");
+                    onFinished?.Invoke(this);
+                }
+                else
+                {
+                    SendFrame();
+                }
             }
         }
     }

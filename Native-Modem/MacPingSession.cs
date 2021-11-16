@@ -12,9 +12,10 @@ namespace Native_Modem
             readonly uint seqNum;
             DateTime sendTimestamp;
 
-            public MacPingSession(byte destination, FullDuplexModem modem, Action<byte[], Action> sendFrame, Action<TransportSession> onFinished, double timeout) : base(destination, modem, sendFrame, onFinished)
+            public MacPingSession(byte destination, FullDuplexModem modem, Action<byte[], Action<bool>> sendFrame, Action<TransportSession> onFinished, double timeout) : base(destination, modem, sendFrame, onFinished)
             {
                 timer = new Timer(timeout);
+                timer.AutoReset = false;
                 timer.Elapsed += (sender, e) => 
                 {
                     OnLogInfo?.Invoke("Timeout!");

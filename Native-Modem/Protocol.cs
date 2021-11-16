@@ -128,10 +128,11 @@ namespace Native_Modem
 
         public int QuietCriteria { get; }
         public double AckTimeout { get; }
+        public int MaxRetransmit { get; }
 
         const float syncPowerThreshold = 0.5f;
 
-        public Protocol(float amplitude,int sampleRate, int samplesPerBit, byte maxPayloadSize, double ackTimeout)
+        public Protocol(float amplitude,int sampleRate, int samplesPerBit, byte maxPayloadSize, double ackTimeout, int maxRetransmit)
         {
             // preamble 32 bits: 10101010 10101010 10101010 10101011
             Preamble = new BitArray(new byte[4] { 0x55, 0x55, 0x55, 0xD5 });
@@ -159,6 +160,34 @@ namespace Native_Modem
             FrameMaxDataBytes = maxPayloadSize;
             QuietCriteria = 4 * samplesPerBit;
             AckTimeout = ackTimeout;
+            MaxRetransmit = maxRetransmit;
+        }
+
+        static readonly Random backoffRand = new Random();
+        const double TIME_SLOT = 10d;
+        const int MAX_COLLISIONS = 8;
+        const int MAX_EXP = 5;
+
+        /// <summary>
+        /// returns -1 if fails too many times
+        /// </summary>
+        /// <param name="fails"></param>
+        /// <returns></returns>
+        public static double GetBackoffTime(int fails)
+        {
+            if (fails >= MAX_COLLISIONS)
+            {
+                return -1d;
+            }
+            int exp = backoffRand.Next(-1, Math.Min(fails, MAX_EXP + 1));
+            if (exp == -1)
+            {
+                return 0d;
+            }
+            else
+            {
+                return TIME_SLOT * (0x1 << exp);
+            }
         }
 
         public static bool GetBit(float power, ref bool phase)

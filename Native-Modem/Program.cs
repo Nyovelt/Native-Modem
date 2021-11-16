@@ -39,18 +39,19 @@ namespace Native_Modem
                 }
             }
 
-            Console.WriteLine($"Correct bits: {sameCount} / {iLength}, {(float)sameCount / iLength * 100f}%");
+            Console.WriteLine($"Correct bytes: {sameCount} / {iLength}, {(float)sameCount / iLength * 100f}%");
         }
 
         static void FullDuplexModemTest(bool recordTx, bool recordRx)
         {
             Protocol protocol = new Protocol(
-                amplitude: 0.1f,
+                amplitude: 0.02f,
                 sampleRate: 48000,
                 samplesPerBit: 2,
                 maxPayloadSize: 128,
-                ackTimeout: 150);
-            string driverName = SelectAsioDriver();
+                ackTimeout: 250,
+                maxRetransmit: 8);
+            string driverName = AsioUtilities.SelectAsioDriver();
             Console.WriteLine("Do you want to configure the control panel? (y/n)");
             if (char.TryParse(Console.ReadLine(), out char c))
             {
@@ -98,6 +99,7 @@ namespace Native_Modem
             {
                 Console.WriteLine("MAC address invalid. It should be an integer in [0, 255]. Please try again: ");
             }
+            Console.WriteLine("Press enter to stop modem...");
 
             //Get input bits and transport
             BinaryReader inputStream = new BinaryReader(new FileStream("../../../INPUT.bin", FileMode.Open, FileAccess.Read));
@@ -109,26 +111,12 @@ namespace Native_Modem
                 modem.MacPing((byte)destination, 200d);
             }
 
-            Console.WriteLine("Press enter to stop modem...");
             Console.ReadLine();
             Console.WriteLine($"Received {frameCount} frames in total.");
             Console.WriteLine($"Received {byteCount} bytes in total.");
 
             writer.Close();
             modem.Dispose();
-        }
-
-        static string SelectAsioDriver()
-        {
-            Console.WriteLine("Select an ASIO driver:");
-            string[] asioDriverName = AsioDriver.GetAsioDriverNames();
-            for (int i = 0; i < asioDriverName.Length; i++)
-            {
-                Console.WriteLine($"{i}: {asioDriverName[i]}");
-            }
-            string selected = asioDriverName[int.Parse(Console.ReadLine())];
-            Console.WriteLine($"Choosing the ASIO driver: {selected}");
-            return selected;
         }
     }
 }

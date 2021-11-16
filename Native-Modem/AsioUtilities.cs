@@ -1,11 +1,24 @@
 ﻿using System;
-using System.Collections.Generic;
 using NAudio.Wave;
+using NAudio.Wave.Asio;
 
 namespace Native_Modem
 {
     public static class AsioUtilities
     {
+        public static string SelectAsioDriver()
+        {
+            Console.WriteLine("Select an ASIO driver:");
+            string[] asioDriverName = AsioDriver.GetAsioDriverNames();
+            for (int i = 0; i < asioDriverName.Length; i++)
+            {
+                Console.WriteLine($"{i}: {asioDriverName[i]}");
+            }
+            string selected = asioDriverName[int.Parse(Console.ReadLine())];
+            Console.WriteLine($"Choosing the ASIO driver: {selected}");
+            return selected;
+        }
+
         public static void SetupAsioOut(AsioOut asioOut)
         {
             Console.WriteLine("Select input channel:");

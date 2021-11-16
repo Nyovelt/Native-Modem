@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using System.Timers;
 
 namespace Native_Modem
 {
@@ -12,9 +13,9 @@ namespace Native_Modem
             readonly RxThread Rx;
 
             public readonly SampleFIFO TxFIFO;
-            readonly Queue<(byte[], Action)> pending;
-
-            public bool Sending { get; private set; }
+            readonly Queue<(byte[], Action<bool>)> pending;
+            readonly Timer retryTimer;
+            int tries;
             
             public TxThread(Protocol protocol, RxThread Rx, int bufferSize, string saveAudioTo = null)
             {
@@ -22,17 +23,19 @@ namespace Native_Modem
                 this.Rx = Rx;
 
                 TxFIFO = new SampleFIFO(protocol.SampleRate, bufferSize, saveAudioTo);
-                pending = new Queue<(byte[], Action)>();
-
-                Sending = false;
-
-                Rx.OnQuiet += TrySend;
+                pending = new Queue<(byte[], Action<bool>)>();
+                retryTimer = new Timer();
+                retryTimer.AutoReset = false;
+                retryTimer.Elapsed += (sender, e) =>
+                {
+                    TrySend();
+                };
+                tries = 0;
             }
 
             public void Dispose()
             {
-                Rx.OnQuiet -= TrySend;
-
+                retryTimer.Stop();
                 TxFIFO.Dispose();
             }
 
@@ -72,6 +75,10 @@ namespace Native_Modem
 
             void PushFrameWithPreamble(byte[] frame)
             {
+                if (TxFIFO.Count != 0)
+                {
+                    Console.WriteLine("TxFIFO not empty when writing frame!!!!!!!!!!!!!");
+                }
                 int sampleCount = frame.Length * protocol.SamplesPerTenBits + protocol.PreambleSampleCount;
                 if (!TxFIFO.AvailableFor(sampleCount))
                 {
@@ -82,29 +89,63 @@ namespace Native_Modem
                 PushFrame(frame);
             }
 
+            void OnFailed()
+            {
+                tries = 0;
+                pending.Dequeue().Item2?.Invoke(false);
+
+                if (pending.Count > 0)
+                {
+                    TrySend();
+                }
+            }
+
             void OnSendOver()
             {
-                pending.Dequeue().Item2?.Invoke();
-                Sending = false;
                 TxFIFO.OnReadToEmpty -= OnSendOver;
+                tries = 0;
+                pending.Dequeue().Item2?.Invoke(true);
 
-                TrySend();
+                if (pending.Count > 0)
+                {
+                    TrySend();
+                }
             }
 
             void TrySend()
             {
-                if (!Sending && Rx.IsQuiet && pending.TryPeek(out (byte[], Action) next))
+                tries++;
+                if (Rx.IsQuiet)
                 {
-                    Sending = true;
                     TxFIFO.OnReadToEmpty += OnSendOver;
-                    PushFrameWithPreamble(next.Item1);
+                    PushFrameWithPreamble(pending.Peek().Item1);
+                }
+                else
+                {
+                    double backoff = Protocol.GetBackoffTime(tries);
+                    if (backoff < 0d)
+                    {
+                        OnFailed();
+                    }
+                    else if (backoff == 0d)
+                    {
+                        TrySend();
+                    }
+                    else
+                    {
+                        retryTimer.Interval = backoff;
+                        retryTimer.Start();
+                    }
                 }
             }
 
-            public void TransportFrame(byte[] frame, Action onFrameSent)
+            public void TransportFrame(byte[] frame, Action<bool> onSendComplete)
             {
-                pending.Enqueue((frame, onFrameSent));
-                TrySend();
+                pending.Enqueue((frame, onSendComplete));
+                if (pending.Count == 1)
+                {
+                    TrySend();
+                }
             }
         }
     }

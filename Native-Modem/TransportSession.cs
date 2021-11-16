@@ -7,11 +7,11 @@ namespace Native_Modem
         protected readonly byte destination;
         protected readonly FullDuplexModem modem;
         protected readonly Action<TransportSession> onFinished;
-        protected readonly Action<byte[], Action> sendFrame;
+        protected readonly Action<byte[], Action<bool>> sendFrame;
 
         public Action<string> OnLogInfo;
 
-        public TransportSession(byte destination, FullDuplexModem modem, Action<byte[], Action> sendFrame, Action<TransportSession> onFinished)
+        public TransportSession(byte destination, FullDuplexModem modem, Action<byte[], Action<bool>> sendFrame, Action<TransportSession> onFinished)
         {
             this.destination = destination;
             this.modem = modem;

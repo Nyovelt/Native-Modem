@@ -17,7 +17,6 @@ namespace Native_Modem
             readonly Protocol protocol;
 
             public bool IsQuiet { get; private set; }
-            public Action OnQuiet;
             public Action<byte[]> OnFrameReceived;
 
             RxState state;
@@ -74,7 +73,6 @@ namespace Native_Modem
                             if (quietCounter >= protocol.QuietCriteria)
                             {
                                 IsQuiet = true;
-                                OnQuiet?.Invoke();
                             }
                         }
                     }
