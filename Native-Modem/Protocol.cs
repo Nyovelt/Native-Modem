@@ -134,7 +134,7 @@ namespace Native_Modem
             StartPhase = false;
 
             Amplitude = amplitude;
-            Threshold = amplitude * 0.3f;
+            Threshold = amplitude * 0.2f;
 
             SampleRate = sampleRate;
             SamplesPerBit = samplesPerBit;
@@ -146,9 +146,9 @@ namespace Native_Modem
         }
 
         static readonly Random backoffRand = new Random();
-        const double TIME_SLOT = 10d;
-        const int MAX_COLLISIONS = 8;
-        const int MAX_EXP = 5;
+        const double TIME_SLOT = 1d;
+        const int MAX_COLLISIONS = 10;
+        const int MAX_EXP = 6;
 
         /// <summary>
         /// returns -1 if fails too many times

@@ -49,7 +49,7 @@ namespace Native_Modem
                 sampleRate: 48000,
                 samplesPerBit: 2,
                 maxPayloadSize: 128,
-                ackTimeout: 250,
+                ackTimeout: 200,
                 maxRetransmit: 8);
             string driverName = AsioUtilities.SelectAsioDriver();
             Console.WriteLine("Do you want to configure the control panel? (y/n)");
