@@ -15,6 +15,7 @@ namespace Native_Modem
                 Demodulating
             }
             readonly Protocol protocol;
+            readonly bool captureStereo;
 
             public bool IsQuiet { get; private set; }
             public Action<byte[]> OnFrameReceived;
@@ -34,9 +35,10 @@ namespace Native_Modem
             int bytesDecoded;
             bool phase;
 
-            public RxThread(Protocol protocol)
+            public RxThread(Protocol protocol, bool captureStereo)
             {
                 this.protocol = protocol;
+                this.captureStereo = captureStereo;
 
                 IsQuiet = false;
 
@@ -52,17 +54,21 @@ namespace Native_Modem
 
             public void ProcessData(byte[] data, int length)
             {
-                for (int i = 0; i < length; i += 4)
+                if (captureStereo)
                 {
-                    ProcessSample(BitConverter.ToSingle(data, i));
+                    for (int i = 0; i < length; i += 8)
+                    {
+                        float sum = BitConverter.ToSingle(data, i);
+                        sum += BitConverter.ToSingle(data, i + 4);
+                        ProcessSample(sum * 0.5f);
+                    }
                 }
-            }
-
-            public void ProccessSamples(float[] buffer, int count)
-            {
-                for (int i = 0; i < count; i++)
+                else
                 {
-                    ProcessSample(buffer[i]);
+                    for (int i = 0; i < length; i += 4)
+                    {
+                        ProcessSample(BitConverter.ToSingle(data, i));
+                    }
                 }
             }
 

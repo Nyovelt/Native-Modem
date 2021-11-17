@@ -125,9 +125,8 @@ namespace Native_Modem
         public int QuietCriteria { get; }
         public double AckTimeout { get; }
         public int MaxRetransmit { get; }
-        public int ClockAfterFrame { get; }
 
-        public Protocol(float amplitude,int sampleRate, int samplesPerBit, byte maxPayloadSize, double ackTimeout, int maxRetransmit, int delayMilliseconds, int clockAfterFrame)
+        public Protocol(float amplitude,int sampleRate, int samplesPerBit, byte maxPayloadSize, double ackTimeout, int maxRetransmit, int delayMilliseconds)
         {
             // preamble(SFD) 32 bits: 10101010 10101010 10101010 10101011
             SFD = 0xAAAAAAAB;
@@ -144,7 +143,6 @@ namespace Native_Modem
             AckTimeout = ackTimeout;
             MaxRetransmit = maxRetransmit;
             Delay = delayMilliseconds;
-            ClockAfterFrame = clockAfterFrame;
         }
 
         static readonly Random backoffRand = new Random();

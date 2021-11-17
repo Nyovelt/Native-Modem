@@ -51,8 +51,7 @@ namespace Native_Modem
                 maxPayloadSize: 128,
                 ackTimeout: 200,
                 maxRetransmit: 8,
-                delayMilliseconds: 10,
-                clockAfterFrame: 0);
+                delayMilliseconds: 3);
 
             Console.WriteLine("Please enter your MAC address (in decimal): ");
             int address;

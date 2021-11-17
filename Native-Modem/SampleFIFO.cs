@@ -4,7 +4,7 @@ using System;
 
 namespace Native_Modem
 {
-    public class SampleFIFO : ISampleProvider, IWaveProvider
+    public class SampleFIFO : ISampleProvider
     {
         readonly WaveFormat waveFormat;
         readonly RingBuffer<float> ringBuffer;
@@ -69,32 +69,6 @@ namespace Native_Modem
             {
                 buffer[offset + c] = 0f;
             }
-
-            if (samples > 0 && ringBuffer.Count == 0)
-            {
-                OnReadToEmpty?.Invoke();
-            }
-
-            return count;
-        }
-
-        public int Read(byte[] buffer, int offset, int count)
-        {
-            if ((count & 0x3) != 0)
-            {
-                throw new Exception("Read bytes can't divided by 4!");
-            }
-            int samples = Math.Min(ringBuffer.Count, count >> 2);
-            int writePos = offset;
-            for (int i = 0; i < samples; i++)
-            {
-                if (!BitConverter.TryWriteBytes(new Span<byte>(buffer, writePos, 4), ringBuffer.ReadAndRemoveNext()))
-                {
-                    throw new Exception("Write samples error!");
-                }
-                writePos += 4;
-            }
-            new Span<byte>(buffer, writePos, count - (samples << 2)).Fill(0);
 
             if (samples > 0 && ringBuffer.Count == 0)
             {

@@ -73,23 +73,13 @@ namespace Native_Modem
                 }
             }
 
-            void PushClock(int bits)
-            {
-                bool level = true;
-                for (int i = 0; i < bits; i++)
-                {
-                    PushLevel(level);
-                    level = !level;
-                }
-            }
-
             void PushFrameWithPreamble(byte[] frame)
             {
                 if (TxFIFO.Count != 0)
                 {
                     Console.WriteLine("TxFIFO not empty when writing frame!!!!!!!!!!!!!");
                 }
-                int sampleCount = frame.Length * protocol.SamplesPerTenBits + (protocol.SamplesPerBit * protocol.ClockAfterFrame + 32);
+                int sampleCount = frame.Length * protocol.SamplesPerTenBits + (protocol.SamplesPerBit << 5);
                 if (!TxFIFO.AvailableFor(sampleCount))
                 {
                     throw new Exception("Tx buffer overflow!");
@@ -97,7 +87,6 @@ namespace Native_Modem
 
                 PushPreamble();
                 PushFrame(frame);
-                PushClock(protocol.ClockAfterFrame);
             }
 
             void OnFailed()

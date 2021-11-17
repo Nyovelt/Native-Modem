@@ -28,36 +28,48 @@ namespace Native_Modem
             this.macAddress = macAddress;
             this.onDataReceived = onDataReceived;
 
-            Rx = new RxThread(protocol);
-            Tx = new TxThread(protocol, Rx, protocol.SampleRate, saveTransportTo);
-            TxSessions = new Queue<TransportSession>();
-
-            rxSessions = new Dictionary<byte, uint>();
-
             wasapiOut = new WasapiOut(
-                device: WasapiUtilities.SelectOutputDevice(), 
+                device: WasapiUtilities.SelectOutputDevice(),
                 shareMode: AudioClientShareMode.Exclusive,
                 useEventSync: true,
                 latency: protocol.Delay);
-            wasapiOut.Init(Tx.TxFIFO);
             wasapiOut.Volume = 1f;
 
             wasapiCapture = new WasapiCapture(
                 captureDevice: WasapiUtilities.SelectInputDevice(),
                 useEventSync: true,
                 audioBufferMillisecondsLength: protocol.Delay);
+            bool captureStereo;
+            switch (wasapiCapture.WaveFormat.Channels)
+            {
+                case 1:
+                    captureStereo = false;
+                    break;
+                case 2:
+                    captureStereo = true;
+                    break;
+                default:
+                    throw new Exception("Capture channels unsupported!");
+            }
+
+            Rx = new RxThread(protocol, captureStereo);
+            Tx = new TxThread(protocol, Rx, protocol.SampleRate, saveTransportTo);
+            TxSessions = new Queue<TransportSession>();
+
+            rxSessions = new Dictionary<byte, uint>();
 
             if (!string.IsNullOrEmpty(saveRecordTo))
             {
-                recordWriter = new WaveFileWriter(saveRecordTo, WaveFormat.CreateIeeeFloatWaveFormat(protocol.SampleRate, 1));
+                recordWriter = new WaveFileWriter(saveRecordTo, WaveFormat.CreateIeeeFloatWaveFormat(protocol.SampleRate, captureStereo ? 2 : 1));
             }
             else
             {
                 recordWriter = null;
             }
 
-            wasapiCapture.DataAvailable += OnRxSamplesAvailable;
+            wasapiOut.Init(Tx.TxFIFO);
             wasapiOut.Play();
+            wasapiCapture.DataAvailable += OnRxSamplesAvailable;
             wasapiCapture.StartRecording();
 
             Rx.OnFrameReceived += OnFrameReceived;
@@ -72,9 +84,9 @@ namespace Native_Modem
 
             Rx.OnFrameReceived -= OnFrameReceived;
 
-            wasapiCapture.DataAvailable -= OnRxSamplesAvailable;
             wasapiOut.Stop();
             wasapiCapture.StopRecording();
+            wasapiCapture.DataAvailable -= OnRxSamplesAvailable;
 
             recordWriter?.Dispose();
 
