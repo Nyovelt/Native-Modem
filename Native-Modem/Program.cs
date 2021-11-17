@@ -48,11 +48,11 @@ namespace Native_Modem
                 amplitude: 0.05f,
                 sampleRate: 48000,
                 samplesPerBit: 2,
-                maxPayloadSize: 252,
-                ackTimeout: 150,
+                maxPayloadSize: 128,
+                ackTimeout: 200,
                 maxRetransmit: 8,
-                delayMilliseconds: 2,
-                clockAfterFrame: 256);
+                delayMilliseconds: 10,
+                clockAfterFrame: 0);
 
             Console.WriteLine("Please enter your MAC address (in decimal): ");
             int address;
