@@ -67,6 +67,10 @@ namespace Native_Modem
                 recordWriter = null;
             }
 
+            wasapiOut.PlaybackStopped += (sender, e) =>
+            {
+                Console.WriteLine($"Playback stopped: \n{e.Exception}");
+            };
             wasapiOut.Init(Tx.TxFIFO);
             wasapiOut.Play();
             wasapiCapture.DataAvailable += OnRxSamplesAvailable;
