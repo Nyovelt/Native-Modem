@@ -1,5 +1,4 @@
-﻿using NAudio.Wave.Asio;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 
@@ -10,7 +9,7 @@ namespace Native_Modem
         [STAThread]
         static void Main()
         {
-            FullDuplexModem(false, true);
+            FullDuplexModem();
         }
 
         enum Operation
@@ -34,9 +33,23 @@ namespace Native_Modem
                 new KeyValuePair<Operation, string[]>(Operation.Quit, Array.Empty<string>())
             });
 
-        static void FullDuplexModem(bool recordTx, bool recordRx)
+        static void FullDuplexModem()
         {
-            Protocol protocol = Protocol.ReadFromFile("../../../protocol.conf");
+            Console.Write("Please enter work folder: ");
+            string workFolder;
+            while (true)
+            {
+                workFolder = Console.ReadLine();
+                if (Directory.Exists(workFolder))
+                {
+                    break;
+                }
+                else
+                {
+                    Console.Write("Folder doesn't exist. Retry: ");
+                }
+            }
+            Protocol protocol = Protocol.ReadFromFile(Path.Combine(workFolder, "protocol.conf"));
 
             Console.WriteLine("Please enter your MAC address (in decimal): ");
             byte address;
@@ -49,7 +62,7 @@ namespace Native_Modem
                 address, 
                 (source, data) =>
                 {
-                    FileStream outFile = new FileStream($"../../../OUTPUT.bin", FileMode.OpenOrCreate, FileAccess.Write);
+                    FileStream outFile = new FileStream(Path.Combine(workFolder, "OUTPUT.bin"), FileMode.OpenOrCreate, FileAccess.Write);
                     outFile.SetLength(0);
                     BinaryWriter writer = new BinaryWriter(outFile);
                     writer.Write(data);
@@ -58,9 +71,7 @@ namespace Native_Modem
                 info =>
                 {
                     Console.Write($"\r{info}\n> ");
-                },
-                recordTx ? "../../../transportRecord.wav" : null,
-                recordRx ? "../../../receiverRecord.wav" : null);
+                });
 
             Console.WriteLine("Modem started, please type in commands.");
 
@@ -126,7 +137,7 @@ namespace Native_Modem
                         }
                         else
                         {
-                            BinaryReader inputStream = new BinaryReader(new FileStream("../../../INPUT.bin", FileMode.Open, FileAccess.Read));
+                            BinaryReader inputStream = new BinaryReader(new FileStream(Path.Combine(workFolder, "INPUT.bin"), FileMode.Open, FileAccess.Read));
                             byte[] input = inputStream.ReadBytes((int)inputStream.BaseStream.Length);
                             inputStream.Close();
                             modem.TransportData((byte)sendDest, input);
@@ -134,7 +145,7 @@ namespace Native_Modem
                         break;
 
                     case Operation.CompareIO:
-                        CompareResult();
+                        CompareResult(workFolder);
                         break;
 
                     case Operation.Quit:
@@ -149,10 +160,10 @@ namespace Native_Modem
             modem.Dispose();
         }
 
-        static void CompareResult()
+        static void CompareResult(string workFolder)
         {
-            BinaryReader iStream = new BinaryReader(new FileStream("../../../INPUT.bin", FileMode.Open, FileAccess.Read));
-            BinaryReader oStream = new BinaryReader(new FileStream("../../../OUTPUT.bin", FileMode.Open, FileAccess.Read));
+            BinaryReader iStream = new BinaryReader(new FileStream(Path.Combine(workFolder, "INPUT.bin"), FileMode.Open, FileAccess.Read));
+            BinaryReader oStream = new BinaryReader(new FileStream(Path.Combine(workFolder, "OUTPUT.bin"), FileMode.Open, FileAccess.Read));
             int iLength = (int)iStream.BaseStream.Length;
             int oLength = (int)oStream.BaseStream.Length;
             if (iLength != oLength)
