@@ -149,6 +149,12 @@ namespace Native_Modem
             session.OnSessionActivated();
         }
 
+        void OnFileReceived(byte source, byte[] data)
+        {
+            onFileReceived.Invoke(source, data);
+            onLogInfo.Invoke($"Received file of lenth {data.Length} from {source}");
+        }
+
         void OnFrameReceived(byte[] frame)
         {
             if (!Protocol.Frame.IsValid(frame))
@@ -176,7 +182,7 @@ namespace Native_Modem
                         if (rxSession.IsCompleted && type == Protocol.FrameType.Data_Start)
                         {
                             rxSessions[source] = DataReceiveSession.InitializeSession(
-                                source, this, Tx.TransportFrame, onFileReceived, seqNum);
+                                source, this, Tx.TransportFrame, OnFileReceived, seqNum);
                         }
                         else
                         {
@@ -188,7 +194,7 @@ namespace Native_Modem
                         if (type == Protocol.FrameType.Data_Start)
                         {
                             rxSessions[source] = DataReceiveSession.InitializeSession(
-                                source, this, Tx.TransportFrame, onFileReceived, seqNum);
+                                source, this, Tx.TransportFrame, OnFileReceived, seqNum);
                         }
                     }
                     break;

@@ -49,7 +49,6 @@ namespace Native_Modem
                 address, 
                 (source, data) =>
                 {
-                    Console.WriteLine($"Received file of lenth {data.Length} from {source}");
                     FileStream outFile = new FileStream($"../../../OUTPUT.bin", FileMode.OpenOrCreate, FileAccess.Write);
                     outFile.SetLength(0);
                     BinaryWriter writer = new BinaryWriter(outFile);
