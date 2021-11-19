@@ -88,7 +88,6 @@ namespace Native_Modem
                     return;
                 }
 
-                Console.WriteLine($"Ack {seqNum} received");
                 if (seqNum == Protocol.Frame.NextSequenceNumberOf(lastAck))
                 {
                     lastAck = seqNum;
@@ -115,7 +114,7 @@ namespace Native_Modem
 
             void SendFrame()
             {
-                Console.WriteLine("Sending!");
+                OnLogInfo?.Invoke("Sending");
                 tries++;
                 sendFrame.Invoke(framesPending.Peek(), success =>
                 {

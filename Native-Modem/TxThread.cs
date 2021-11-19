@@ -77,7 +77,7 @@ namespace Native_Modem
             {
                 if (TxFIFO.Count != 0)
                 {
-                    Console.WriteLine("TxFIFO not empty when writing frame!!!!!!!!!!!!!");
+                    throw new Exception("TxFIFO not empty when writing frame!!!!!!!!!!!!!");
                 }
                 int sampleCount = frame.Length * protocol.SamplesPerTenBits + (protocol.SamplesPerBit << 5);
                 if (!TxFIFO.AvailableFor(sampleCount))
@@ -122,7 +122,7 @@ namespace Native_Modem
                 }
                 else
                 {
-                    double backoff = Protocol.GetBackoffTime(tries);
+                    double backoff = protocol.GetBackoffTime(tries);
                     if (backoff < 0d)
                     {
                         OnFailed();

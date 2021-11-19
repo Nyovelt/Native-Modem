@@ -3,6 +3,7 @@
 using Force.Crc32;
 using System;
 using System.Collections;
+using System.IO;
 
 namespace Native_Modem
 {
@@ -63,6 +64,7 @@ namespace Native_Modem
 
         public static class Frame
         {
+            public const int DATA_OFFSET = 4;
             public static byte GetDestination(byte[] frame) => frame[0];
             public static byte GetSource(byte[] frame) => frame[1];
             public static FrameType GetType(byte[] frame) => (FrameType)((uint)frame[2] & 0x0F);
@@ -114,6 +116,7 @@ namespace Native_Modem
         public float Amplitude { get; }
         public float Threshold { get; }
 
+        public bool SharedMode { get; }
         public int SampleRate { get; }
         public int Delay { get; }
 
@@ -126,7 +129,29 @@ namespace Native_Modem
         public double AckTimeout { get; }
         public int MaxRetransmit { get; }
 
-        public Protocol(float amplitude,int sampleRate, int samplesPerBit, byte maxPayloadSize, double ackTimeout, int maxRetransmit, int delayMilliseconds)
+        //Actually not part of protocol
+        public bool RecordTx { get; }
+        public bool RecordRx { get; }
+
+        //About backoff
+        readonly Random random;
+        double backoffTimeslot;
+        int backoffMaxCollisions;
+        int backoffMaxExp;
+
+        public Protocol(float amplitude,
+            int sampleRate, 
+            int samplesPerBit, 
+            byte maxPayloadSize, 
+            double ackTimeout, 
+            int maxRetransmit, 
+            int delayMilliseconds, 
+            bool useSharedMode, 
+            bool recordTx, 
+            bool recordRx, 
+            double backoffTimeslot,
+            int backoffMaxCollisions,
+            int backoffMaxExp)
         {
             // preamble(SFD) 32 bits: 10101010 10101010 10101010 10101011
             SFD = 0xAAAAAAAB;
@@ -143,32 +168,136 @@ namespace Native_Modem
             AckTimeout = ackTimeout;
             MaxRetransmit = maxRetransmit;
             Delay = delayMilliseconds;
-        }
+            SharedMode = useSharedMode;
+            RecordTx = recordTx;
+            RecordRx = recordRx;
 
-        static readonly Random backoffRand = new Random();
-        const double TIME_SLOT = 1d;
-        const int MAX_COLLISIONS = 10;
-        const int MAX_EXP = 6;
+            random = new Random();
+            this.backoffTimeslot = backoffTimeslot;
+            this.backoffMaxCollisions = backoffMaxCollisions;
+            this.backoffMaxExp = backoffMaxExp;
+
+        }
 
         /// <summary>
         /// returns -1 if fails too many times
         /// </summary>
         /// <param name="fails"></param>
         /// <returns></returns>
-        public static double GetBackoffTime(int fails)
+        public double GetBackoffTime(int fails)
         {
-            if (fails >= MAX_COLLISIONS)
+            if (fails >= backoffMaxCollisions)
             {
                 return -1d;
             }
-            int exp = backoffRand.Next(-1, Math.Min(fails, MAX_EXP + 1));
+            int exp = random.Next(-1, Math.Min(fails, backoffMaxExp + 1));
             if (exp == -1)
             {
                 return 0d;
             }
             else
             {
-                return TIME_SLOT * (0x1 << exp);
+                return backoffTimeslot * (0x1 << exp);
+            }
+        }
+
+        public static Protocol ReadFromFile(string path)
+        {
+            try
+            {
+                StreamReader reader = new StreamReader(path);
+                float amplitude = 0.05f;
+                int sampleRate = 48000;
+                int samplesPerBit = 2;
+                byte maxPayloadSize = 128;
+                double ackTimeout = 200d;
+                int maxRetransmit = 8;
+                int delayMilliseconds = 10;
+                bool useSharedMode = false;
+                bool recordTx = false;
+                bool recordRx = true;
+                double backoffTimeslot = 1d;
+                int backoffMaxCollisions = 10;
+                int backoffMaxExp = 6;
+
+                string line;
+                while ((line = reader.ReadLine()) != null)
+                {
+                    string[] args = line.Split('=', ':', ' ');
+                    string property = args[0];
+                    string value = args[1];
+
+                    if (string.Compare(property, "amplitude", true) == 0)
+                    {
+                        amplitude = float.Parse(value);
+                    }
+                    else if (string.Compare(property, "samplerate", true) == 0)
+                    {
+                        sampleRate = int.Parse(value);
+                    }
+                    else if (string.Compare(property, "samplesperbit", true) == 0)
+                    {
+                        samplesPerBit = int.Parse(value);
+                    }
+                    else if (string.Compare(property, "maxpayloadsize", true) == 0)
+                    {
+                        maxPayloadSize = byte.Parse(value);
+                    }
+                    else if (string.Compare(property, "acktimeout", true) == 0)
+                    {
+                        ackTimeout = double.Parse(value);
+                    }
+                    else if (string.Compare(property, "maxretransmit", true) == 0)
+                    {
+                        maxRetransmit = int.Parse(value);
+                    }
+                    else if (string.Compare(property, "delaymilliseconds", true) == 0)
+                    {
+                        delayMilliseconds = int.Parse(value);
+                    }
+                    else if (string.Compare(property, "usesharedmode", true) == 0)
+                    {
+                        useSharedMode = bool.Parse(value);
+                    }
+                    else if (string.Compare(property, "recordtx", true) == 0)
+                    {
+                        recordTx = bool.Parse(value);
+                    }
+                    else if (string.Compare(property, "recordrx", true) == 0)
+                    {
+                        recordRx = bool.Parse(value);
+                    }
+                    else if (string.Compare(property, "backofftimeslot", true) == 0)
+                    {
+                        backoffTimeslot = double.Parse(value);
+                    }
+                    else if (string.Compare(property, "backoffmaxcollisions", true) == 0)
+                    {
+                        backoffMaxCollisions = int.Parse(value);
+                    }
+                    else if (string.Compare(property, "backoffmaxexp", true) == 0)
+                    {
+                        backoffMaxExp = int.Parse(value);
+                    }
+                }
+                return new Protocol(
+                    amplitude,
+                    sampleRate,
+                    samplesPerBit,
+                    maxPayloadSize,
+                    ackTimeout,
+                    maxRetransmit,
+                    delayMilliseconds,
+                    useSharedMode,
+                    recordTx,
+                    recordRx,
+                    backoffTimeslot,
+                    backoffMaxCollisions,
+                    backoffMaxExp);
+            }
+            catch (Exception e)
+            {
+                throw new Exception($"Invalid protocol file: \n{e}");
             }
         }
 

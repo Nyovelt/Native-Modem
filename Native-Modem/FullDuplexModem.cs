@@ -14,23 +14,25 @@ namespace Native_Modem
         readonly RxThread Rx;
         readonly Queue<TransportSession> TxSessions;
         readonly byte macAddress;
-        readonly Action<byte, byte[]> onDataReceived;
-        readonly Dictionary<byte, uint> rxSessions;
+        readonly Action<byte, byte[]> onFileReceived;
+        readonly Action<string> onLogInfo;
+        readonly Dictionary<byte, DataReceiveSession> rxSessions;
         readonly WaveFileWriter recordWriter;
 
         /// <summary>
         /// The parameters of onDataReceived are source address and payload
         /// </summary>
         /// <param name="onDataReceived"></param>
-        public FullDuplexModem(Protocol protocol, byte macAddress, Action<byte, byte[]> onDataReceived, string saveTransportTo = null, string saveRecordTo = null)
+        public FullDuplexModem(Protocol protocol, byte macAddress, Action<byte, byte[]> onFileReceived, Action<string> onLogInfo, string saveTransportTo = null, string saveRecordTo = null)
         {
             this.protocol = protocol;
             this.macAddress = macAddress;
-            this.onDataReceived = onDataReceived;
+            this.onFileReceived = onFileReceived;
+            this.onLogInfo = onLogInfo;
 
             wasapiOut = new WasapiOut(
                 device: WasapiUtilities.SelectOutputDevice(),
-                shareMode: AudioClientShareMode.Exclusive,
+                shareMode: protocol.SharedMode ? AudioClientShareMode.Shared : AudioClientShareMode.Exclusive,
                 useEventSync: true,
                 latency: protocol.Delay);
             wasapiOut.Volume = 1f;
@@ -56,7 +58,7 @@ namespace Native_Modem
             Tx = new TxThread(protocol, Rx, protocol.SampleRate, saveTransportTo);
             TxSessions = new Queue<TransportSession>();
 
-            rxSessions = new Dictionary<byte, uint>();
+            rxSessions = new Dictionary<byte, DataReceiveSession>();
 
             if (!string.IsNullOrEmpty(saveRecordTo))
             {
@@ -67,12 +69,9 @@ namespace Native_Modem
                 recordWriter = null;
             }
 
-            wasapiOut.PlaybackStopped += (sender, e) =>
-            {
-                Console.WriteLine($"Playback stopped: \n{e.Exception}");
-            };
             wasapiOut.Init(Tx.TxFIFO);
             wasapiOut.Play();
+            wasapiOut.PlaybackStopped += OnPlaybackError;
             wasapiCapture.DataAvailable += OnRxSamplesAvailable;
             wasapiCapture.StartRecording();
 
@@ -88,9 +87,10 @@ namespace Native_Modem
 
             Rx.OnFrameReceived -= OnFrameReceived;
 
-            wasapiOut.Stop();
             wasapiCapture.StopRecording();
             wasapiCapture.DataAvailable -= OnRxSamplesAvailable;
+            wasapiOut.PlaybackStopped -= OnPlaybackError;
+            wasapiOut.Stop();
 
             recordWriter?.Dispose();
 
@@ -119,6 +119,11 @@ namespace Native_Modem
             }
         }
 
+        void OnPlaybackError(object sender, StoppedEventArgs e)
+        {
+            onLogInfo.Invoke($"Playback stopped: \n{e.Exception}");
+        }
+
         void OnRxSamplesAvailable(object sender, WaveInEventArgs e)
         {
             Rx.ProcessData(e.Buffer, e.BytesRecorded);
@@ -138,23 +143,22 @@ namespace Native_Modem
             }
         }
 
-        void OnTxSessionLogInfo(string info)
-        {
-            Console.WriteLine(info);
-        }
-
         void ActivateTxSession(TransportSession session)
         {
-            session.OnLogInfo = OnTxSessionLogInfo;
+            session.OnLogInfo = onLogInfo;
             session.OnSessionActivated();
         }
 
         void OnFrameReceived(byte[] frame)
         {
-            if (!Protocol.Frame.IsValid(frame) ||
-                Protocol.Frame.GetDestination(frame) != macAddress)
+            if (!Protocol.Frame.IsValid(frame))
             {
-                Console.WriteLine("Invalid frame received!");
+                onLogInfo.Invoke("Invalid frame received!");
+                return;
+            }
+
+            if (Protocol.Frame.GetDestination(frame) != macAddress)
+            {
                 return;
             }
 
@@ -166,60 +170,26 @@ namespace Native_Modem
                 case Protocol.FrameType.Data:
                 case Protocol.FrameType.Data_Start:
                 case Protocol.FrameType.Data_End:
-                    Console.WriteLine($"Data frame of type {type} received!");
-                    const uint NO_ACK = uint.MaxValue;
-                    uint ackSeqNum = seqNum;
-                    if (rxSessions.TryGetValue(source, out uint prevSeqNum))
+                    onLogInfo.Invoke($"Data frame of type {type} received!");
+                    if (rxSessions.TryGetValue(source, out DataReceiveSession rxSession))
                     {
-                        switch (type)
+                        if (rxSession.IsCompleted && type == Protocol.FrameType.Data_Start)
                         {
-                            case Protocol.FrameType.Data:
-                                if (seqNum == Protocol.Frame.NextSequenceNumberOf(prevSeqNum))
-                                {
-                                    rxSessions[source] = seqNum;
-                                    onDataReceived.Invoke(source, Protocol.Frame.ExtractData(frame));
-                                }
-                                else
-                                {
-                                    ackSeqNum = prevSeqNum;
-                                }
-                                break;
-                            case Protocol.FrameType.Data_Start:
-                                rxSessions[source] = seqNum;
-                                break;
-                            case Protocol.FrameType.Data_End:
-                                if (seqNum == Protocol.Frame.NextSequenceNumberOf(prevSeqNum))
-                                {
-                                    rxSessions.Remove(source);
-                                }
-                                else
-                                {
-                                    ackSeqNum = prevSeqNum;
-                                }
-                                break;
+                            rxSessions[source] = DataReceiveSession.InitializeSession(
+                                source, this, Tx.TransportFrame, onFileReceived, seqNum);
+                        }
+                        else
+                        {
+                            rxSession.ReceiveFrame(frame);
                         }
                     }
                     else
                     {
                         if (type == Protocol.FrameType.Data_Start)
                         {
-                            rxSessions[source] = seqNum;
+                            rxSessions[source] = DataReceiveSession.InitializeSession(
+                                source, this, Tx.TransportFrame, onFileReceived, seqNum);
                         }
-                        else
-                        {
-                            ackSeqNum = NO_ACK;
-                        }
-                    }
-
-                    if (ackSeqNum != NO_ACK)
-                    {
-                        Tx.TransportFrame(
-                            Protocol.Frame.WrapFrameWithoutData(
-                                source,
-                                macAddress,
-                                Protocol.FrameType.Acknowledgement,
-                                ackSeqNum), 
-                            null);
                     }
                     break;
 
@@ -235,9 +205,9 @@ namespace Native_Modem
 
                 case Protocol.FrameType.Acknowledgement:
                 case Protocol.FrameType.MacPing_Reply:
-                    if (TxSessions.TryPeek(out TransportSession session))
+                    if (TxSessions.TryPeek(out TransportSession txSession))
                     {
-                        session.OnReceiveFrame(source, type, seqNum);
+                        txSession.OnReceiveFrame(source, type, seqNum);
                     }
                     break;
             }
