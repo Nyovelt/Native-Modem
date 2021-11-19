@@ -8,7 +8,6 @@ namespace Native_Modem
     public partial class FullDuplexModem
     {
         readonly Protocol protocol;
-        readonly WasapiOut wasapiOut;
         readonly WasapiCapture wasapiCapture;
         readonly TxThread Tx;
         readonly RxThread Rx;
@@ -29,13 +28,6 @@ namespace Native_Modem
             this.macAddress = macAddress;
             this.onFileReceived = onFileReceived;
             this.onLogInfo = onLogInfo;
-
-            wasapiOut = new WasapiOut(
-                device: WasapiUtilities.SelectOutputDevice(),
-                shareMode: protocol.SharedMode ? AudioClientShareMode.Shared : AudioClientShareMode.Exclusive,
-                useEventSync: true,
-                latency: protocol.Delay);
-            wasapiOut.Volume = 1f;
 
             wasapiCapture = new WasapiCapture(
                 captureDevice: WasapiUtilities.SelectInputDevice(),
@@ -69,9 +61,6 @@ namespace Native_Modem
                 recordWriter = null;
             }
 
-            wasapiOut.Init(Tx.TxFIFO);
-            wasapiOut.Play();
-            wasapiOut.PlaybackStopped += OnPlaybackError;
             wasapiCapture.DataAvailable += OnRxSamplesAvailable;
             wasapiCapture.StartRecording();
 
@@ -89,12 +78,9 @@ namespace Native_Modem
 
             wasapiCapture.StopRecording();
             wasapiCapture.DataAvailable -= OnRxSamplesAvailable;
-            wasapiOut.PlaybackStopped -= OnPlaybackError;
-            wasapiOut.Stop();
 
             recordWriter?.Dispose();
 
-            wasapiOut.Dispose();
             wasapiCapture.Dispose();
             Tx.Dispose();
         }
@@ -117,11 +103,6 @@ namespace Native_Modem
             {
                 ActivateTxSession(session);
             }
-        }
-
-        void OnPlaybackError(object sender, StoppedEventArgs e)
-        {
-            onLogInfo.Invoke($"Playback stopped: \n{e.Exception}");
         }
 
         void OnRxSamplesAvailable(object sender, WaveInEventArgs e)

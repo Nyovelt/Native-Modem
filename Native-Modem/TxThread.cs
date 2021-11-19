@@ -1,6 +1,7 @@
-﻿using System;
+﻿using NAudio.Wave;
+using NAudio.CoreAudioApi;
+using System;
 using System.Collections.Generic;
-using System.Threading.Tasks;
 using System.Timers;
 
 namespace Native_Modem
@@ -11,6 +12,7 @@ namespace Native_Modem
         {
             readonly Protocol protocol;
             readonly RxThread Rx;
+            readonly WasapiOut wasapiOut;
 
             public readonly SampleFIFO TxFIFO;
             readonly Queue<(byte[], Action<bool>)> pending;
@@ -31,12 +33,23 @@ namespace Native_Modem
                     TrySend();
                 };
                 tries = 0;
+
+                wasapiOut = new WasapiOut(
+                    device: WasapiUtilities.SelectOutputDevice(),
+                    shareMode: protocol.SharedMode ? AudioClientShareMode.Shared : AudioClientShareMode.Exclusive,
+                    true,
+                    protocol.Delay);
+                wasapiOut.Volume = 1f;
+                wasapiOut.Init(TxFIFO);
+                wasapiOut.Play();
             }
 
             public void Dispose()
             {
+                wasapiOut.Stop();
                 retryTimer.Stop();
                 TxFIFO.Dispose();
+                wasapiOut.Dispose();
             }
 
             void PushLevel(bool high)

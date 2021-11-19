@@ -71,7 +71,9 @@ namespace Native_Modem
                 info =>
                 {
                     Console.Write($"\r{info}\n> ");
-                });
+                },
+                protocol.RecordTx ? Path.Combine(workFolder, "transportRecord.wav") : null,
+                protocol.RecordRx ? Path.Combine(workFolder, "receiverRecord.wav") : null);
 
             Console.WriteLine("Modem started, please type in commands.");
 
