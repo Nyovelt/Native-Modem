@@ -113,18 +113,30 @@ namespace Native_Modem
                 }
             }
 
+            void PushVolumeUp(int samples)
+            {
+                float magnitude = 0f;
+                float step = protocol.Amplitude / samples;
+                for (int i = 0; i < samples; i++)
+                {
+                    TxFIFO.Push(i % 4 < 2 ? magnitude : -magnitude);
+                    magnitude += step;
+                }
+            }
+
             void PushFrameWithPreamble(byte[] frame)
             {
                 if (TxFIFO.Count != 0)
                 {
                     throw new Exception("TxFIFO not empty when writing frame!!!!!!!!!!!!!");
                 }
-                int sampleCount = frame.Length * protocol.SamplesPerTenBits + (protocol.SamplesPerBit << 5) + protocol.FadeoutSamples;
+                int sampleCount = frame.Length * protocol.SamplesPerTenBits + (protocol.SamplesPerBit << 5) + protocol.FadeoutSamples + protocol.FadeinSamples;
                 if (!TxFIFO.AvailableFor(sampleCount))
                 {
                     throw new Exception("Tx buffer overflow!");
                 }
 
+                PushVolumeUp(protocol.FadeinSamples);
                 PushPreamble();
                 PushFrame(frame);
                 PushVolumeDown(protocol.FadeoutSamples);

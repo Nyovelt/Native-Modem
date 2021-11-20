@@ -129,6 +129,7 @@ namespace Native_Modem
         public int QuietCriteria { get; }
         public double AckTimeout { get; }
         public int MaxRetransmit { get; }
+        public int FadeinSamples { get; }
         public int FadeoutSamples { get; }
 
         //Actually not part of protocol
@@ -142,19 +143,20 @@ namespace Native_Modem
         readonly int backoffMaxExp;
 
         public Protocol(float amplitude,
-            int sampleRate, 
-            int samplesPerBit, 
-            byte maxPayloadSize, 
-            double ackTimeout, 
-            int maxRetransmit, 
-            int delayMilliseconds, 
-            bool useSharedMode, 
-            bool recordTx, 
-            bool recordRx, 
+            int sampleRate,
+            int samplesPerBit,
+            byte maxPayloadSize,
+            double ackTimeout,
+            int maxRetransmit,
+            int delayMilliseconds,
+            bool useSharedMode,
+            bool recordTx,
+            bool recordRx,
             double backoffTimeslot,
             int backoffMaxCollisions,
             int backoffMaxExp,
             int fadeoutSamples,
+            int fadeinSamples,
             float quietThreshold,
             float collisionThreshold)
         {
@@ -176,6 +178,7 @@ namespace Native_Modem
             Delay = delayMilliseconds;
             SharedMode = useSharedMode;
             FadeoutSamples = fadeoutSamples;
+            FadeinSamples = fadeinSamples;
             RecordTx = recordTx;
             RecordRx = recordRx;
 
@@ -227,6 +230,7 @@ namespace Native_Modem
                 int backoffMaxCollisions = 10;
                 int backoffMaxExp = 6;
                 int fadeoutSamples = 160;
+                int fadeinSamples = 40;
                 float quietThreshold = 0.2f;
                 float collisionThreshold = 1.5f;
 
@@ -293,6 +297,10 @@ namespace Native_Modem
                     {
                         fadeoutSamples = int.Parse(value);
                     }
+                    else if (string.Compare(property, "fadeinsamples", true) == 0)
+                    {
+                        fadeinSamples = int.Parse(value);
+                    }
                     else if (string.Compare(property, "quietthreshold", true) == 0)
                     {
                         quietThreshold = float.Parse(value);
@@ -317,6 +325,7 @@ namespace Native_Modem
                     backoffMaxCollisions,
                     backoffMaxExp,
                     fadeoutSamples,
+                    fadeinSamples,
                     quietThreshold,
                     collisionThreshold);
             }
