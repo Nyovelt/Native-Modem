@@ -17,7 +17,7 @@ namespace Native_Modem
         readonly Action<string> onLogInfo;
         readonly Dictionary<byte, DataReceiveSession> rxSessions;
         readonly WaveFileWriter recordWriter;
-
+        
         /// <summary>
         /// The parameters of onDataReceived are source address and payload
         /// </summary>
@@ -100,6 +100,19 @@ namespace Native_Modem
             }
         }
 
+
+
+        public void MacPerf(byte destination)
+        {
+            double  timeInterval = 1000; //millisecond
+            byte[] data = new byte[10000];
+            var rand = new Random();
+            rand.NextBytes(data);
+            DataTransportSession session = new DataTransportSession(destination, this, Tx.TransportFrame, OnTxSessionFinished, data, timeInterval);
+            TxSessions.Enqueue(session);
+            if (TxSessions.Count == 1)
+                ActivateTxSession(session);
+        }
         public void MacPing(byte destination, double timeout)
         {
             MacPingSession session = new MacPingSession(destination, this, Tx.TransportFrame, OnTxSessionFinished, timeout);

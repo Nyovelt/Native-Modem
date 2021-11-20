@@ -131,7 +131,15 @@ namespace Native_Modem
                         break;
 
                     case Operation.MacPerf:
-                        Console.WriteLine("Not implemented!");
+                        //Console.WriteLine("Not implemented!");
+                        if (!byte.TryParse(args[1], out byte perfDest)) 
+                        {
+                            Console.WriteLine("Invalid arguments");
+                        }
+                        else
+                        {
+                            modem.MacPerf(perfDest);
+                        }
                         break;
 
                     case Operation.SendFile:

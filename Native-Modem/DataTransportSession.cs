@@ -9,9 +9,13 @@ namespace Native_Modem
         class DataTransportSession : TransportSession
         {
             readonly Timer timer;
+            readonly Timer perfTimer;
             readonly Queue<byte[]> framesPending;
+            DateTime dateStart;
             uint lastAck;
+            uint bytesSent;
             int tries;
+            
 
             public DataTransportSession(byte destination, FullDuplexModem modem, Action<byte[], Action<bool>> sendFrame, Action<TransportSession> onFinished, byte[] data) : base(destination, modem, sendFrame, onFinished)
             {
@@ -69,8 +73,20 @@ namespace Native_Modem
                     seqCounter));
             }
 
+            public DataTransportSession(byte destination, FullDuplexModem modem, Action<byte[], Action<bool>> sendFrame, Action<TransportSession> onFinished, byte[] data, double timeInterval) : this(destination, modem, sendFrame, onFinished, data)
+            {
+                perfTimer = new Timer(timeInterval);
+                perfTimer.Elapsed += (sender, e) =>
+                {
+                    PerfLog();
+                };
+            }
             public override void OnSessionActivated()
             {
+                bytesSent = 0;
+                dateStart = DateTime.Now;
+
+                perfTimer?.Start();
                 OnLogInfo?.Invoke($"Start sending {framesPending.Count} frames to {destination}...");
                 SendFrame();
             }
@@ -91,12 +107,15 @@ namespace Native_Modem
                 if (seqNum == Protocol.Frame.NextSequenceNumberOf(lastAck))
                 {
                     lastAck = seqNum;
-                    framesPending.Dequeue();
+                    //framesPending.Dequeue();
+                    bytesSent += Protocol.Frame.GetDataLength(framesPending.Dequeue());
                     timer.Stop();
                     OnLogInfo?.Invoke($"Frame sent successfully. {framesPending.Count} left.");
                     if (framesPending.Count == 0)
                     {
                         OnLogInfo?.Invoke($"All frames sent successfully.");
+                        PerfLog();
+                        perfTimer?.Stop();
                         onFinished?.Invoke(this);
                     }
                     else
@@ -134,12 +153,20 @@ namespace Native_Modem
                 if (tries > modem.protocol.MaxRetransmit)
                 {
                     OnLogInfo?.Invoke("Transmit failed! Please check the link, or the destination.");
+                    perfTimer?.Stop();
                     onFinished?.Invoke(this);
                 }
                 else
                 {
                     SendFrame();
                 }
+            }
+
+            void PerfLog()
+            {
+                DateTime now = DateTime.Now;
+                var speed =  (bytesSent << 3) / (now - dateStart).TotalMilliseconds;
+                modem.onLogInfo.Invoke($"Transition speed: {speed} kbps");
             }
         }
     }
