@@ -19,6 +19,7 @@ namespace Native_Modem
             MacPerf,
             SendFile,
             CompareIO,
+            RestartTx,
             Quit
         }
 
@@ -30,6 +31,7 @@ namespace Native_Modem
                 new KeyValuePair<Operation, string[]>(Operation.MacPerf, new string[1] { "destination" }),
                 new KeyValuePair<Operation, string[]>(Operation.SendFile, new string[1] { "destination" }),
                 new KeyValuePair<Operation, string[]>(Operation.CompareIO, Array.Empty<string>()),
+                new KeyValuePair<Operation, string[]>(Operation.RestartTx, Array.Empty<string>()),
                 new KeyValuePair<Operation, string[]>(Operation.Quit, Array.Empty<string>())
             });
 
@@ -148,6 +150,10 @@ namespace Native_Modem
 
                     case Operation.CompareIO:
                         CompareResult(workFolder);
+                        break;
+
+                    case Operation.RestartTx:
+                        modem.RestartTx();
                         break;
 
                     case Operation.Quit:

@@ -85,6 +85,11 @@ namespace Native_Modem
             Tx.Dispose();
         }
 
+        public void RestartTx()
+        {
+            Tx.Restart();
+        }
+
         public void TransportData(byte destination, byte[] data)
         {
             DataTransportSession session = new DataTransportSession(destination, this, Tx.TransportFrame, OnTxSessionFinished, data);

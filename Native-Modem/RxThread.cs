@@ -19,6 +19,8 @@ namespace Native_Modem
 
             public bool IsQuiet { get; private set; }
             public Action<byte[]> OnFrameReceived;
+            public Action OnCollisionDetected;
+            public Action OnQuiet;
 
             RxState state;
 
@@ -74,7 +76,9 @@ namespace Native_Modem
 
             void ProcessSample(float sample)
             {
-                if (MathF.Abs(sample) < protocol.Threshold)
+                float magnitude = MathF.Abs(sample);
+                bool collision = false;
+                if (magnitude < protocol.Threshold)
                 {
                     if (!IsQuiet)
                     {
@@ -82,6 +86,7 @@ namespace Native_Modem
                         if (quietCounter >= protocol.QuietCriteria)
                         {
                             IsQuiet = true;
+                            OnQuiet?.Invoke();
                         }
                     }
                 }
@@ -89,6 +94,11 @@ namespace Native_Modem
                 {
                     IsQuiet = false;
                     quietCounter = 0;
+                    if (magnitude > protocol.CollisionThreshold)
+                    {
+                        collision = true;
+                        OnCollisionDetected?.Invoke();
+                    }
                 }
 
                 switch (state)
@@ -101,7 +111,7 @@ namespace Native_Modem
                         break;
 
                     case RxState.WaitingForSync:
-                        if (!IsQuiet)
+                        if (!IsQuiet && !collision)
                         {
                             state = RxState.Syncing;
                             syncBitBuffer.Clear();
@@ -115,6 +125,10 @@ namespace Native_Modem
                         {
                             state = RxState.WaitingForSync;
                         }
+                        else if (collision)
+                        {
+                            state = RxState.WaitingForQuiet;
+                        }
                         else
                         {
                             ProcessSyncing(sample);
@@ -125,6 +139,10 @@ namespace Native_Modem
                         if (IsQuiet)
                         {
                             state = RxState.WaitingForSync;
+                        }
+                        else if (collision)
+                        {
+                            state = RxState.WaitingForQuiet;
                         }
                         else
                         {
@@ -169,14 +187,14 @@ namespace Native_Modem
                         headerBuffer[bytesDecoded++] = data;
                         if (bytesDecoded == 4)
                         {
-                            if (headerBuffer[3] > protocol.FrameMaxDataBytes)
+                            byte length = Protocol.Frame.GetDataLength(headerBuffer);
+                            if (length > protocol.FrameMaxDataBytes)
                             {
-                                Console.WriteLine("Invalid frame length!");
                                 state = RxState.WaitingForQuiet;
                             }
                             else
                             {
-                                frameBuffer = new byte[8 + headerBuffer[3]];
+                                frameBuffer = new byte[8 + length];
                                 Array.Copy(headerBuffer, frameBuffer, 4);
                             }
                         }

@@ -163,8 +163,9 @@ namespace B83.Collections
 
         public void Clear()
         {
-            for (int i = 0; i < m_Capacity; i++)
-                m_Data[i] = default(T);
+            //comment out since don't need to reset values
+            //for (int i = 0; i < m_Capacity; i++)
+            //    m_Data[i] = default(T);
             m_Read = 0;
             m_Write = 0;
             m_Count = 0;

@@ -12,7 +12,8 @@ namespace Native_Modem
         {
             readonly Protocol protocol;
             readonly RxThread Rx;
-            readonly WasapiOut wasapiOut;
+            readonly MMDevice outDevice;
+            WasapiOut wasapiOut;
 
             public readonly SampleFIFO TxFIFO;
             readonly Queue<(byte[], Action<bool>)> pending;
@@ -34,8 +35,23 @@ namespace Native_Modem
                 };
                 tries = 0;
 
+                outDevice = WasapiUtilities.SelectOutputDevice();
                 wasapiOut = new WasapiOut(
-                    device: WasapiUtilities.SelectOutputDevice(),
+                    device: outDevice,
+                    shareMode: protocol.SharedMode ? AudioClientShareMode.Shared : AudioClientShareMode.Exclusive,
+                    true,
+                    protocol.Delay);
+                wasapiOut.Volume = 1f;
+                wasapiOut.Init(TxFIFO);
+                wasapiOut.Play();
+            }
+
+            public void Restart()
+            {
+                wasapiOut.Stop();
+                wasapiOut.Dispose();
+                wasapiOut = new WasapiOut(
+                    device: outDevice,
                     shareMode: protocol.SharedMode ? AudioClientShareMode.Shared : AudioClientShareMode.Exclusive,
                     true,
                     protocol.Delay);
@@ -86,13 +102,24 @@ namespace Native_Modem
                 }
             }
 
+            void PushVolumeDown(int samples)
+            {
+                float magnitude = protocol.Amplitude;
+                float step = magnitude / samples;
+                for (int i = 0; i < samples; i++)
+                {
+                    TxFIFO.Push(i % 4 < 2 ? magnitude : -magnitude);
+                    magnitude -= step;
+                }
+            }
+
             void PushFrameWithPreamble(byte[] frame)
             {
                 if (TxFIFO.Count != 0)
                 {
                     throw new Exception("TxFIFO not empty when writing frame!!!!!!!!!!!!!");
                 }
-                int sampleCount = frame.Length * protocol.SamplesPerTenBits + (protocol.SamplesPerBit << 5);
+                int sampleCount = frame.Length * protocol.SamplesPerTenBits + (protocol.SamplesPerBit << 5) + protocol.FadeoutSamples;
                 if (!TxFIFO.AvailableFor(sampleCount))
                 {
                     throw new Exception("Tx buffer overflow!");
@@ -100,22 +127,13 @@ namespace Native_Modem
 
                 PushPreamble();
                 PushFrame(frame);
-            }
-
-            void OnFailed()
-            {
-                tries = 0;
-                pending.Dequeue().Item2?.Invoke(false);
-
-                if (pending.Count > 0)
-                {
-                    TrySend();
-                }
+                PushVolumeDown(protocol.FadeoutSamples);
             }
 
             void OnSendOver()
             {
                 TxFIFO.OnReadToEmpty -= OnSendOver;
+                Rx.OnCollisionDetected -= OnCollisionDetected;
                 tries = 0;
                 pending.Dequeue().Item2?.Invoke(true);
 
@@ -125,30 +143,53 @@ namespace Native_Modem
                 }
             }
 
-            void TrySend()
+            void OnChannelQuiet()
             {
-                tries++;
-                if (Rx.IsQuiet)
+                Rx.OnQuiet -= OnChannelQuiet;
+                TrySend();
+            }
+
+            void OnCollisionDetected()
+            {
+                Console.WriteLine("Collision detected!");
+                TxFIFO.OnReadToEmpty -= OnSendOver;
+                Rx.OnCollisionDetected -= OnCollisionDetected;
+                TxFIFO.Flush();
+
+                double backoff = protocol.GetBackoffTime(tries);
+                if (backoff < 0d)
                 {
-                    TxFIFO.OnReadToEmpty += OnSendOver;
-                    PushFrameWithPreamble(pending.Peek().Item1);
-                }
-                else
-                {
-                    double backoff = protocol.GetBackoffTime(tries);
-                    if (backoff < 0d)
-                    {
-                        OnFailed();
-                    }
-                    else if (backoff == 0d)
+                    tries = 0;
+                    pending.Dequeue().Item2?.Invoke(false);
+
+                    if (pending.Count > 0)
                     {
                         TrySend();
                     }
-                    else
-                    {
-                        retryTimer.Interval = backoff;
-                        retryTimer.Start();
-                    }
+                }
+                else if (backoff == 0d)
+                {
+                    TrySend();
+                }
+                else
+                {
+                    retryTimer.Interval = backoff;
+                    retryTimer.Start();
+                }
+            }
+
+            void TrySend()
+            {
+                if (Rx.IsQuiet)
+                {
+                    tries++;
+                    PushFrameWithPreamble(pending.Peek().Item1);
+                    TxFIFO.OnReadToEmpty += OnSendOver;
+                    Rx.OnCollisionDetected += OnCollisionDetected;
+                }
+                else
+                {
+                    Rx.OnQuiet += OnChannelQuiet;
                 }
             }
 

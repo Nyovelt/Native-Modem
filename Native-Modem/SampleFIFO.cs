@@ -77,5 +77,10 @@ namespace Native_Modem
 
             return count;
         }
+
+        public void Flush()
+        {
+            ringBuffer.Clear();
+        }
     }
 }

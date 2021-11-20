@@ -115,6 +115,7 @@ namespace Native_Modem
 
         public float Amplitude { get; }
         public float Threshold { get; }
+        public float CollisionThreshold { get; }
 
         public bool SharedMode { get; }
         public int SampleRate { get; }
@@ -128,6 +129,7 @@ namespace Native_Modem
         public int QuietCriteria { get; }
         public double AckTimeout { get; }
         public int MaxRetransmit { get; }
+        public int FadeoutSamples { get; }
 
         //Actually not part of protocol
         public bool RecordTx { get; }
@@ -135,9 +137,9 @@ namespace Native_Modem
 
         //About backoff
         readonly Random random;
-        double backoffTimeslot;
-        int backoffMaxCollisions;
-        int backoffMaxExp;
+        readonly double backoffTimeslot;
+        readonly int backoffMaxCollisions;
+        readonly int backoffMaxExp;
 
         public Protocol(float amplitude,
             int sampleRate, 
@@ -151,14 +153,18 @@ namespace Native_Modem
             bool recordRx, 
             double backoffTimeslot,
             int backoffMaxCollisions,
-            int backoffMaxExp)
+            int backoffMaxExp,
+            int fadeoutSamples,
+            float quietThreshold,
+            float collisionThreshold)
         {
             // preamble(SFD) 32 bits: 10101010 10101010 10101010 10101011
             SFD = 0xAAAAAAAB;
             StartPhase = false;
 
             Amplitude = amplitude;
-            Threshold = amplitude * 0.2f;
+            Threshold = amplitude * quietThreshold;
+            CollisionThreshold = amplitude * collisionThreshold;
 
             SampleRate = sampleRate;
             SamplesPerBit = samplesPerBit;
@@ -169,6 +175,7 @@ namespace Native_Modem
             MaxRetransmit = maxRetransmit;
             Delay = delayMilliseconds;
             SharedMode = useSharedMode;
+            FadeoutSamples = fadeoutSamples;
             RecordTx = recordTx;
             RecordRx = recordRx;
 
@@ -219,6 +226,9 @@ namespace Native_Modem
                 double backoffTimeslot = 1d;
                 int backoffMaxCollisions = 10;
                 int backoffMaxExp = 6;
+                int fadeoutSamples = 160;
+                float quietThreshold = 0.2f;
+                float collisionThreshold = 1.5f;
 
                 string line;
                 while ((line = reader.ReadLine()) != null)
@@ -279,6 +289,18 @@ namespace Native_Modem
                     {
                         backoffMaxExp = int.Parse(value);
                     }
+                    else if (string.Compare(property, "fadeoutsamples", true) == 0)
+                    {
+                        fadeoutSamples = int.Parse(value);
+                    }
+                    else if (string.Compare(property, "quietthreshold", true) == 0)
+                    {
+                        quietThreshold = float.Parse(value);
+                    }
+                    else if (string.Compare(property, "collisionThreshold", true) == 0)
+                    {
+                        collisionThreshold = float.Parse(value);
+                    }
                 }
                 return new Protocol(
                     amplitude,
@@ -293,7 +315,10 @@ namespace Native_Modem
                     recordRx,
                     backoffTimeslot,
                     backoffMaxCollisions,
-                    backoffMaxExp);
+                    backoffMaxExp,
+                    fadeoutSamples,
+                    quietThreshold,
+                    collisionThreshold);
             }
             catch (Exception e)
             {
