@@ -128,12 +128,12 @@ namespace Native_Modem
             {
                 if (TxFIFO.Count != 0)
                 {
-                    throw new Exception("TxFIFO not empty when writing frame!!!!!!!!!!!!!");
+                    throw new InvalidOperationException("TxFIFO not empty when writing frame!!!!!!!!!!!!!");
                 }
                 int sampleCount = frame.Length * protocol.SamplesPerTenBits + (protocol.SamplesPerBit << 5) + protocol.FadeoutSamples + protocol.FadeinSamples;
                 if (!TxFIFO.AvailableFor(sampleCount))
                 {
-                    throw new Exception("Tx buffer overflow!");
+                    throw new OverflowException("Tx buffer overflow!");
                 }
 
                 PushVolumeUp(protocol.FadeinSamples);

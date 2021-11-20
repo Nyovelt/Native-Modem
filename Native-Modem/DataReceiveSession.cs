@@ -39,12 +39,10 @@ namespace Native_Modem
                     case Protocol.FrameType.Data_Start:
                         if (seqNum != lastSeqNum)
                         {
-                            throw new Exception("Data start frames with different sequence number received!");
+                            modem.onLogInfo("Data start frames with different sequence number received!");
+                            lastSeqNum = seqNum;
                         }
-                        else
-                        {
-                            SendAck();
-                        }
+                        SendAck();
                         break;
 
                     case Protocol.FrameType.Data:
