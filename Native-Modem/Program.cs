@@ -20,6 +20,7 @@ namespace Native_Modem
             SendFile,
             CompareIO,
             RestartTx,
+            GenInput,
             Quit
         }
 
@@ -32,6 +33,7 @@ namespace Native_Modem
                 new KeyValuePair<Operation, string[]>(Operation.SendFile, new string[1] { "destination" }),
                 new KeyValuePair<Operation, string[]>(Operation.CompareIO, Array.Empty<string>()),
                 new KeyValuePair<Operation, string[]>(Operation.RestartTx, Array.Empty<string>()),
+                new KeyValuePair<Operation, string[]>(Operation.GenInput, new string[1] { "length" }),
                 new KeyValuePair<Operation, string[]>(Operation.Quit, Array.Empty<string>())
             });
 
@@ -164,6 +166,17 @@ namespace Native_Modem
                         modem.RestartTx();
                         break;
 
+                    case Operation.GenInput:
+                        if (!int.TryParse(args[1], out int length))
+                        {
+                            Console.WriteLine("Invalid length!");
+                        }
+                        else
+                        {
+                            GenerateInput(workFolder, length);
+                        }
+                        break;
+
                     case Operation.Quit:
                         quit = true;
                         break;
@@ -174,6 +187,18 @@ namespace Native_Modem
             }
 
             modem.Dispose();
+        }
+
+        static void GenerateInput(string workFolder, int length)
+        {
+            FileStream inputStream = new FileStream(Path.Combine(workFolder, "INPUT.bin"), FileMode.OpenOrCreate, FileAccess.Write);
+            inputStream.SetLength(0);
+            BinaryWriter writer = new BinaryWriter(inputStream);
+            byte[] input = new byte[length];
+            Random random = new Random();
+            random.NextBytes(input);
+            writer.Write(input);
+            writer.Close();
         }
 
         static void CompareResult(string workFolder)
