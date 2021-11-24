@@ -111,12 +111,19 @@ namespace Native_Modem
                         break;
 
                     case RxState.WaitingForSync:
-                        if (!IsQuiet && !collision)
+                        if (!IsQuiet)
                         {
-                            state = RxState.Syncing;
-                            syncBitBuffer.Clear();
-                            syncBitBuffer.Add(sample);
-                            syncBits = 0;
+                            if (collision)
+                            {
+                                state = RxState.WaitingForQuiet;
+                            }
+                            else
+                            {
+                                state = RxState.Syncing;
+                                syncBitBuffer.Clear();
+                                syncBitBuffer.Add(sample);
+                                syncBits = 0;
+                            }
                         }
                         break;
 
