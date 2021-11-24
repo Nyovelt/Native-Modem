@@ -2,7 +2,6 @@
 
 using Force.Crc32;
 using System;
-using System.Collections;
 using System.IO;
 
 namespace Native_Modem
@@ -148,15 +147,11 @@ namespace Native_Modem
             byte maxPayloadSize,
             double ackTimeout,
             int maxRetransmit,
-            int delayMilliseconds,
-            bool useSharedMode,
             bool recordTx,
             bool recordRx,
             double backoffTimeslot,
             int backoffMaxCollisions,
             int backoffMaxExp,
-            int fadeoutSamples,
-            int fadeinSamples,
             float quietThreshold,
             float collisionThreshold)
         {
@@ -175,10 +170,6 @@ namespace Native_Modem
             QuietCriteria = 4 * samplesPerBit;
             AckTimeout = ackTimeout;
             MaxRetransmit = maxRetransmit;
-            Delay = delayMilliseconds;
-            SharedMode = useSharedMode;
-            FadeoutSamples = fadeoutSamples;
-            FadeinSamples = fadeinSamples;
             RecordTx = recordTx;
             RecordRx = recordRx;
 
@@ -222,15 +213,11 @@ namespace Native_Modem
                 byte maxPayloadSize = 128;
                 double ackTimeout = 200d;
                 int maxRetransmit = 8;
-                int delayMilliseconds = 10;
-                bool useSharedMode = false;
                 bool recordTx = false;
                 bool recordRx = true;
                 double backoffTimeslot = 1d;
                 int backoffMaxCollisions = 10;
                 int backoffMaxExp = 6;
-                int fadeoutSamples = 160;
-                int fadeinSamples = 40;
                 float quietThreshold = 0.2f;
                 float collisionThreshold = 1.5f;
 
@@ -265,14 +252,6 @@ namespace Native_Modem
                     {
                         maxRetransmit = int.Parse(value);
                     }
-                    else if (string.Compare(property, "delaymilliseconds", true) == 0)
-                    {
-                        delayMilliseconds = int.Parse(value);
-                    }
-                    else if (string.Compare(property, "usesharedmode", true) == 0)
-                    {
-                        useSharedMode = bool.Parse(value);
-                    }
                     else if (string.Compare(property, "recordtx", true) == 0)
                     {
                         recordTx = bool.Parse(value);
@@ -293,14 +272,6 @@ namespace Native_Modem
                     {
                         backoffMaxExp = int.Parse(value);
                     }
-                    else if (string.Compare(property, "fadeoutsamples", true) == 0)
-                    {
-                        fadeoutSamples = int.Parse(value);
-                    }
-                    else if (string.Compare(property, "fadeinsamples", true) == 0)
-                    {
-                        fadeinSamples = int.Parse(value);
-                    }
                     else if (string.Compare(property, "quietthreshold", true) == 0)
                     {
                         quietThreshold = float.Parse(value);
@@ -317,15 +288,11 @@ namespace Native_Modem
                     maxPayloadSize,
                     ackTimeout,
                     maxRetransmit,
-                    delayMilliseconds,
-                    useSharedMode,
                     recordTx,
                     recordRx,
                     backoffTimeslot,
                     backoffMaxCollisions,
                     backoffMaxExp,
-                    fadeoutSamples,
-                    fadeinSamples,
                     quietThreshold,
                     collisionThreshold);
             }

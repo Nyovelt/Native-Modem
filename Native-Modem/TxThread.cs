@@ -1,6 +1,4 @@
-﻿using NAudio.Wave;
-using NAudio.CoreAudioApi;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Timers;
 
@@ -12,8 +10,6 @@ namespace Native_Modem
         {
             readonly Protocol protocol;
             readonly RxThread Rx;
-            readonly MMDevice outDevice;
-            WasapiOut wasapiOut;
 
             public readonly SampleFIFO TxFIFO;
             readonly Queue<(byte[], Action<bool>)> pending;
@@ -34,38 +30,12 @@ namespace Native_Modem
                     TrySend();
                 };
                 tries = 0;
-
-                outDevice = WasapiUtilities.SelectOutputDevice();
-                wasapiOut = new WasapiOut(
-                    device: outDevice,
-                    shareMode: protocol.SharedMode ? AudioClientShareMode.Shared : AudioClientShareMode.Exclusive,
-                    true,
-                    protocol.Delay);
-                wasapiOut.Volume = 1f;
-                wasapiOut.Init(TxFIFO);
-                wasapiOut.Play();
-            }
-
-            public void Restart()
-            {
-                wasapiOut.Stop();
-                wasapiOut.Dispose();
-                wasapiOut = new WasapiOut(
-                    device: outDevice,
-                    shareMode: protocol.SharedMode ? AudioClientShareMode.Shared : AudioClientShareMode.Exclusive,
-                    true,
-                    protocol.Delay);
-                wasapiOut.Volume = 1f;
-                wasapiOut.Init(TxFIFO);
-                wasapiOut.Play();
             }
 
             public void Dispose()
             {
-                wasapiOut.Stop();
                 retryTimer.Stop();
                 TxFIFO.Dispose();
-                wasapiOut.Dispose();
             }
 
             void PushLevel(bool high)
@@ -126,14 +96,9 @@ namespace Native_Modem
 
             void PushFrameWithPreamble(byte[] frame)
             {
-                if (TxFIFO.Count != 0)
+                if (!TxFIFO.IsEmpty)
                 {
                     throw new InvalidOperationException("TxFIFO not empty when writing frame!!!!!!!!!!!!!");
-                }
-                int sampleCount = frame.Length * protocol.SamplesPerTenBits + (protocol.SamplesPerBit << 5) + protocol.FadeoutSamples + protocol.FadeinSamples;
-                if (!TxFIFO.AvailableFor(sampleCount))
-                {
-                    throw new OverflowException("Tx buffer overflow!");
                 }
 
                 PushVolumeUp(protocol.FadeinSamples);

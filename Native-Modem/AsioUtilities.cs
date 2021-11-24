@@ -16,6 +16,18 @@ namespace Native_Modem
             }
             string selected = asioDriverName[int.Parse(Console.ReadLine())];
             Console.WriteLine($"Choosing the ASIO driver: {selected}");
+            Console.WriteLine("Do you want to configure the control panel? (y/n)");
+            if (char.TryParse(Console.ReadLine(), out char c))
+            {
+                if (c == 'y')
+                {
+                    AsioDriver driver = AsioDriver.GetAsioDriverByName(selected);
+                    driver.ControlPanel();
+                    Console.WriteLine("Press enter after setup the control panel");
+                    Console.ReadLine();
+                    driver.ReleaseComAsioDriver();
+                }
+            }
             return selected;
         }
 

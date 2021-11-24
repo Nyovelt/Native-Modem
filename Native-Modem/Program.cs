@@ -19,7 +19,6 @@ namespace Native_Modem
             MacPerf,
             SendFile,
             CompareIO,
-            RestartTx,
             GenInput,
             Quit
         }
@@ -32,7 +31,6 @@ namespace Native_Modem
                 new KeyValuePair<Operation, string[]>(Operation.MacPerf, new string[1] { "destination" }),
                 new KeyValuePair<Operation, string[]>(Operation.SendFile, new string[1] { "destination" }),
                 new KeyValuePair<Operation, string[]>(Operation.CompareIO, Array.Empty<string>()),
-                new KeyValuePair<Operation, string[]>(Operation.RestartTx, Array.Empty<string>()),
                 new KeyValuePair<Operation, string[]>(Operation.GenInput, new string[1] { "length" }),
                 new KeyValuePair<Operation, string[]>(Operation.Quit, Array.Empty<string>())
             });
@@ -133,7 +131,6 @@ namespace Native_Modem
                         break;
 
                     case Operation.MacPerf:
-                        //Console.WriteLine("Not implemented!");
                         if (!byte.TryParse(args[1], out byte perfDest)) 
                         {
                             Console.WriteLine("Invalid arguments");
@@ -160,10 +157,6 @@ namespace Native_Modem
 
                     case Operation.CompareIO:
                         CompareResult(workFolder);
-                        break;
-
-                    case Operation.RestartTx:
-                        modem.RestartTx();
                         break;
 
                     case Operation.GenInput:

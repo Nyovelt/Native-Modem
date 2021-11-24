@@ -1,5 +1,4 @@
 ﻿using NAudio.Wave;
-using NAudio.CoreAudioApi;
 using System;
 using System.Collections.Generic;
 
@@ -8,7 +7,7 @@ namespace Native_Modem
     public partial class FullDuplexModem
     {
         readonly Protocol protocol;
-        readonly WasapiCapture wasapiCapture;
+        readonly AsioOut asioOut;
         readonly TxThread Tx;
         readonly RxThread Rx;
         readonly Queue<TransportSession> TxSessions;
@@ -17,6 +16,8 @@ namespace Native_Modem
         readonly Action<string> onLogInfo;
         readonly Dictionary<byte, DataReceiveSession> rxSessions;
         readonly WaveFileWriter recordWriter;
+
+        readonly float[] rxBuffer = new float[2048];
         
         /// <summary>
         /// The parameters of onDataReceived are source address and payload
@@ -29,24 +30,10 @@ namespace Native_Modem
             this.onFileReceived = onFileReceived;
             this.onLogInfo = onLogInfo;
 
-            wasapiCapture = new WasapiCapture(
-                captureDevice: WasapiUtilities.SelectInputDevice(),
-                useEventSync: true,
-                audioBufferMillisecondsLength: protocol.Delay);
-            bool captureStereo;
-            switch (wasapiCapture.WaveFormat.Channels)
-            {
-                case 1:
-                    captureStereo = false;
-                    break;
-                case 2:
-                    captureStereo = true;
-                    break;
-                default:
-                    throw new Exception("Capture channels unsupported!");
-            }
+            asioOut = new AsioOut(AsioUtilities.SelectAsioDriver());
+            AsioUtilities.SetupAsioOut(asioOut);
 
-            Rx = new RxThread(protocol, captureStereo);
+            Rx = new RxThread(protocol);
             Tx = new TxThread(protocol, Rx, protocol.SampleRate, saveTransportTo);
             TxSessions = new Queue<TransportSession>();
 
@@ -54,15 +41,16 @@ namespace Native_Modem
 
             if (!string.IsNullOrEmpty(saveRecordTo))
             {
-                recordWriter = new WaveFileWriter(saveRecordTo, WaveFormat.CreateIeeeFloatWaveFormat(protocol.SampleRate, captureStereo ? 2 : 1));
+                recordWriter = new WaveFileWriter(saveRecordTo, WaveFormat.CreateIeeeFloatWaveFormat(protocol.SampleRate, 1));
             }
             else
             {
                 recordWriter = null;
             }
 
-            wasapiCapture.DataAvailable += OnRxSamplesAvailable;
-            wasapiCapture.StartRecording();
+            asioOut.InitRecordAndPlayback(Tx.TxFIFO.ToWaveProvider(), 1, protocol.SampleRate);
+            asioOut.AudioAvailable += OnRxSamplesAvailable;
+            asioOut.Play();
 
             Rx.OnFrameReceived += OnFrameReceived;
         }
@@ -76,18 +64,13 @@ namespace Native_Modem
 
             Rx.OnFrameReceived -= OnFrameReceived;
 
-            wasapiCapture.StopRecording();
-            wasapiCapture.DataAvailable -= OnRxSamplesAvailable;
+            asioOut.Stop();
+            asioOut.AudioAvailable -= OnRxSamplesAvailable;
 
             recordWriter?.Dispose();
 
-            wasapiCapture.Dispose();
+            asioOut.Dispose();
             Tx.Dispose();
-        }
-
-        public void RestartTx()
-        {
-            Tx.Restart();
         }
 
         public void TransportData(byte destination, byte[] data)
@@ -99,8 +82,6 @@ namespace Native_Modem
                 ActivateTxSession(session);
             }
         }
-
-
 
         public void MacPerf(byte destination)
         {
@@ -123,10 +104,11 @@ namespace Native_Modem
             }
         }
 
-        void OnRxSamplesAvailable(object sender, WaveInEventArgs e)
+        void OnRxSamplesAvailable(object sender, AsioAudioAvailableEventArgs e)
         {
-            Rx.ProcessData(e.Buffer, e.BytesRecorded);
-            recordWriter?.Write(e.Buffer, 0, e.BytesRecorded);
+            int sampleCount = e.GetAsInterleavedSamples(rxBuffer);
+            Rx.ProcessSamples(rxBuffer, sampleCount);
+            recordWriter?.WriteSamples(rxBuffer, 0, sampleCount);
         }
 
         void OnTxSessionFinished(TransportSession session)

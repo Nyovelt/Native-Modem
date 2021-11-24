@@ -1,23 +1,22 @@
-﻿using B83.Collections;
-using NAudio.Wave;
+﻿using NAudio.Wave;
 using System;
+using System.Collections.Concurrent;
 
 namespace Native_Modem
 {
     public class SampleFIFO : ISampleProvider
     {
         readonly WaveFormat waveFormat;
-        readonly RingBuffer<float> ringBuffer;
+        readonly ConcurrentQueue<float> sampleBuffer;
         readonly WaveFileWriter writer;
 
         public WaveFormat WaveFormat => waveFormat;
-        public int Count => ringBuffer.Count;
         public Action OnReadToEmpty;
 
         public SampleFIFO(int sampleRate, int size, string saveAudioTo = null)
         {
             waveFormat = WaveFormat.CreateIeeeFloatWaveFormat(sampleRate, 1);
-            ringBuffer = new RingBuffer<float>(size);
+            sampleBuffer = new ConcurrentQueue<float>();
             if (!string.IsNullOrEmpty(saveAudioTo))
             {
                 writer = new WaveFileWriter(saveAudioTo, waveFormat);
@@ -36,41 +35,32 @@ namespace Native_Modem
             }
         }
 
-        public bool AvailableFor(int sampleCount)
-        {
-            return ringBuffer.Capacity - ringBuffer.Count >= sampleCount;
-        }
-
-        public bool IsEmpty => ringBuffer.Count == 0;
+        public bool IsEmpty => sampleBuffer.IsEmpty;
 
         public void Push(float sample)
         {
-            ringBuffer.Add(sample);
+            sampleBuffer.Enqueue(sample);
             if (writer != null)
             {
                 writer.WriteSample(sample);
             }
         }
 
-        public float Pop()
-        {
-            return ringBuffer.ReadAndRemoveNext();
-        }
-
         public int Read(float[] buffer, int offset, int count)
         {
-            int samples = ringBuffer.Count > count ? count : ringBuffer.Count;
+            int samples = sampleBuffer.Count > count ? count : sampleBuffer.Count;
             int c = 0;
             for (; c < samples; c++)
             {
-                buffer[offset + c] = ringBuffer.ReadAndRemoveNext();
+                sampleBuffer.TryDequeue(out float sample);
+                buffer[offset + c] = sample;
             }
             for (; c < count; c++)
             {
                 buffer[offset + c] = 0f;
             }
 
-            if (samples > 0 && ringBuffer.Count == 0)
+            if (samples > 0 && sampleBuffer.IsEmpty)
             {
                 OnReadToEmpty?.Invoke();
             }
@@ -80,7 +70,7 @@ namespace Native_Modem
 
         public void Flush()
         {
-            ringBuffer.Clear();
+            sampleBuffer.Clear();
         }
     }
 }
