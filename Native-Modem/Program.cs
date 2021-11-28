@@ -1,15 +1,28 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using YamlDotNet.Serialization;
+using YamlDotNet.Serialization.NamingConventions;
 
 namespace Native_Modem
 {
-    class Program
+    partial class Program
     {
         [STAThread]
         static void Main()
         {
-            FullDuplexModem();
+
+
+
+            //        //FullDuplexModem();
+            Console.Write("Please enter network config file: ");
+            var configFile = Console.ReadLine();
+            //var ipconfig = new IPProtocol(configFolder);
+            var deserializer = new YamlDotNet.Serialization.DeserializerBuilder()
+    .WithNamingConvention(CamelCaseNamingConvention.Instance)
+    .Build();
+            Console.Write(File.ReadAllText(configFile));
+            var myConfig = deserializer.Deserialize<IPProtocal>(File.ReadAllText(configFile));
         }
 
         enum Operation
@@ -221,5 +234,7 @@ namespace Native_Modem
 
             Console.WriteLine($"Correct bytes: {sameCount} / {iLength}, {(float)sameCount / iLength * 100f}%");
         }
+
+
     }
 }
