@@ -16,7 +16,6 @@ namespace Native_Modem
         readonly Action<string> onLogInfo;
         readonly Dictionary<byte, DataReceiveSession> rxSessions;
         readonly WaveFileWriter recordWriter;
-
         readonly float[] rxBuffer = new float[2048];
         
         /// <summary>

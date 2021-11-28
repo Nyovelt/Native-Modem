@@ -12,17 +12,10 @@ namespace Native_Modem
         static void Main()
         {
 
+            var ipprotocal = new IPProtocal();
 
-
-            //        //FullDuplexModem();
-            Console.Write("Please enter network config file: ");
-            var configFile = Console.ReadLine();
-            //var ipconfig = new IPProtocol(configFolder);
-            var deserializer = new YamlDotNet.Serialization.DeserializerBuilder()
-    .WithNamingConvention(CamelCaseNamingConvention.Instance)
-    .Build();
-            Console.Write(File.ReadAllText(configFile));
-            var myConfig = deserializer.Deserialize<IPProtocal>(File.ReadAllText(configFile));
+            // FullDuplexModem();
+            
         }
 
         enum Operation
