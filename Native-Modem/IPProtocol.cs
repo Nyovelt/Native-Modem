@@ -22,13 +22,24 @@ namespace Native_Modem
 
     public class IPProtocal
     {
-        readonly Interface AthernetInterface;
-        readonly FullDuplexModem modem;
+        public Interface AthernetInterface;
+        public FullDuplexModem modem;
         public IPProtocal()
         {
             getInterface(); // 获得 ip 配置
+            startFullDuplexModem();
+            shell();
+        }
 
+        ~IPProtocal()
+        {
+            modem.Dispose();
+        }
 
+        public void shell()
+        {
+            bool quit = false;
+            // 寻找一个更好的交互式内建命令框架
         }
 
         public void getInterface()
@@ -69,6 +80,25 @@ namespace Native_Modem
             //{
             //    Console.WriteLine("MAC address invalid. It should be an integer in [0, 255]. Please try again: ");
             //}
+
+            modem = new FullDuplexModem(protocol,
+                address,
+                (source, data) =>
+                {
+                    FileStream outFile = new FileStream(Path.Combine(workFolder, "OUTPUT.bin"), FileMode.OpenOrCreate, FileAccess.Write);
+                    outFile.SetLength(0);
+                    BinaryWriter writer = new BinaryWriter(outFile);
+                    writer.Write(data);
+                    writer.Close();
+                },
+                info =>
+                {
+                    Console.Write($"\r{info}\n> ");
+                },
+                protocol.RecordTx ? Path.Combine(workFolder, "transportRecord.wav") : null,
+                protocol.RecordRx ? Path.Combine(workFolder, "receiverRecord.wav") : null);
+
+            Console.WriteLine("Modem started, please type in commands.");
         }
 
 
