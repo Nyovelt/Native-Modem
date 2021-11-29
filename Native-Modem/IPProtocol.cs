@@ -19,6 +19,7 @@ namespace Native_Modem
     {
         public string addresses { get; set; }
         public string gateway4 { get; set; }
+        public string EthernerAdapter { get; set; }
     }
 
 
