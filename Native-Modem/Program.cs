@@ -1,4 +1,6 @@
-﻿using System;
+﻿using SharpPcap;
+using SharpPcap.LibPcap;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using YamlDotNet.Serialization;
@@ -11,8 +13,8 @@ namespace Native_Modem
         [STAThread]
         static void Main()
         {
-
-            var ipprotocal = new IPProtocal();
+            test();
+            //var ipprotocal = new IPProtocal();
 
             // FullDuplexModem();
             
@@ -28,6 +30,27 @@ namespace Native_Modem
             GenInput,
             Quit
         }
+
+        static void Device_OnPacketArrival(object s, PacketCapture e)
+        {
+            Console.WriteLine(e.GetPacket());
+        }
+
+        static void test()
+        {
+            var devices = CaptureDeviceList.Instance;
+            foreach (var dev in devices)
+                Console.WriteLine("{0}\n", dev.ToString());
+            Console.WriteLine("Choose the Ethernet Adapter");
+            var  index = Int32.Parse(Console.ReadLine());
+            using var device = LibPcapLiveDeviceList.Instance[index];
+            device.Open();
+            device.OnPacketArrival += Device_OnPacketArrival;
+            device.StartCapture();
+            for (; ; )
+            {}
+        }
+
 
         static readonly Dictionary<Operation, string[]> ARGUMENTS = new Dictionary<Operation, string[]>(
             new KeyValuePair<Operation, string[]>[]

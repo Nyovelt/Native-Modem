@@ -17,9 +17,9 @@ namespace Native_Modem
 
     public class Interface
     {
-        public string addresses { get; set; }
-        public string gateway4 { get; set; }
-        public string EthernerAdapter { get; set; }
+        public string Addresses { get; set; }
+        public string Gateway4 { get; set; }
+        public string EthernetAdapter { get; set; }
     }
 
 
@@ -121,7 +121,7 @@ namespace Native_Modem
         {
             if (!IsValidIP(ipAddress))
                 return false;
-            var rangeC = IPAddressRange.Parse(AthernetInterface.addresses);
+            var rangeC = IPAddressRange.Parse(AthernetInterface.Addresses);
 
 
             return rangeC.Contains(IPAddress.Parse(ipAddress)) ;
@@ -132,10 +132,12 @@ namespace Native_Modem
             if (IsAthernetSubnet(pingDest))
             {
                 // 通过声卡发
+                Console.WriteLine("Athernet");
             }
             else
             {
                 // 通过网卡 (pcap) 发
+                Console.WriteLine("Ethernet");
             }
         }
 
@@ -149,7 +151,15 @@ namespace Native_Modem
             Console.Write(File.ReadAllText(configFile));
             var myconfig = deserializer.Deserialize<Interface>(File.ReadAllText(configFile));
             AthernetInterface = myconfig; // problems here
+            //if (AthernetInterface.EthernerAdapter == null)
+            //{
+            //    Console.WriteLine("114514");
+            //}
+            Console.WriteLine(AthernetInterface.Gateway4);
+            Console.WriteLine(AthernetInterface.Addresses);
+            Console.WriteLine(AthernetInterface.EthernetAdapter);
         }
+
 
         public void startFullDuplexModem()
         {
