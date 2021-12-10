@@ -3,10 +3,16 @@
 
 
 using NetTools;
+using PacketDotNet;
+using SharpPcap;
+using SharpPcap.LibPcap;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net;
+using System.Net.NetworkInformation;
+using PacketDotNet.Utils;
 using YamlDotNet.Serialization.NamingConventions;
 
 namespace Native_Modem
@@ -24,42 +30,60 @@ namespace Native_Modem
 
 
 
-    public class IPProtocal
+    public class IpProtocal
     {
-        public Interface AthernetInterface;
-        public FullDuplexModem modem;
-        public IPProtocal()
+        public FullDuplexModem Modem;
+        public string Node;
+        public LibPcapLiveDevice Device;
+        public bool Printsocketison;
+        public string PrintsocketisonArg;
+        public string IP;
+        public bool Natrecv;
+        public IpProtocal()
         {
-            getInterface(); // 获得 ip 配置
-            startFullDuplexModem();
-            shell();
+
+            GetInterface(); // 获得 ip 配置
+            Device.Open();
+            Device.OnPacketArrival += Device_OnPacketArrival;
+            Device.StartCapture();
+            if (Node is "1" or "2")
+                startFullDuplexModem();
+            Shell();
         }
 
-        enum Operation
+        private enum Operation
         {
-            UDPing
+            printsocket,
+            sendsocket,
+            natsend,
+            natrecv,
+            ping
         }
 
-        static readonly Dictionary<Operation, string[]> ARGUMENTS = new Dictionary<Operation, string[]>(
+        static readonly Dictionary<Operation, string[]> Arguments = new Dictionary<Operation, string[]>(
     new KeyValuePair<Operation, string[]>[]
     {
-                new KeyValuePair<Operation, string[]>(Operation.UDPing, new string[1] { "destination" }),
+                new KeyValuePair<Operation, string[]>(Operation.printsocket, new string[1] { "source address" }),
+                new KeyValuePair<Operation, string[]>(Operation.sendsocket, new string[1] { "destination address" }),
+                new KeyValuePair<Operation, string[]>(Operation.natsend, new string[2] { "file path","destination" }),
+                new KeyValuePair<Operation, string[]>(Operation.ping, new string[1] { "destination" }),
     });
 
-        ~IPProtocal()
+        ~IpProtocal()
         {
-            modem.Dispose();
+            Modem.Dispose();
+            Device.Dispose();
+            Device.Close();
         }
 
-        public void shell()
+        public void Shell()
         {
-            bool quit = false;
             // 寻找一个更好的交互式内建命令框架 // 失败
-            while (!quit)
+            while (true)
             {
                 Console.Write(">");
-                string[] args = Console.ReadLine().Split(' ');
-                if (args.Length == 0)
+                var args = Console.ReadLine()?.Split(' ');
+                if (args is { Length: 0 })
                     continue;
 
                 if (!Enum.TryParse(args[0], true, out Operation op))
@@ -68,7 +92,7 @@ namespace Native_Modem
                     continue;
                 }
 
-                if (args.Length != ARGUMENTS[op].Length + 1)
+                if (args.Length != Arguments[op].Length + 1)
                 {
                     Console.WriteLine("Argument count error. Type 'help' to show help.");
                     continue;
@@ -76,88 +100,333 @@ namespace Native_Modem
 
                 switch (op)
                 {
-                    case Operation.UDPing:
-                        var pingDest = args[1];
-                        if (!IsValidIP(pingDest))
+                    case Operation.printsocket:
+                        if (args[1] == null)
                         {
+                            Console.WriteLine("Invalid arguments.");
+                            break;
+                        }
 
+                        if (Node == "1")
+                        {
+                            Console.WriteLine("Node 1 cannot do printsocket");
+                            break;
+                        }
+                        var pingSource = args[1];
+                        Printsocketison = true;
+                        PrintsocketisonArg = pingSource;
+                        Console.CancelKeyPress += delegate (object sender, ConsoleCancelEventArgs e)
+                        {
+                            Printsocketison = false;
+                            PrintsocketisonArg = null;
+                        };
+                        while (Printsocketison)
+                        {
+                        }
+
+                        Console.WriteLine("Exit printsocket");
+
+                        break;
+                    case Operation.sendsocket:
+                        if (Node == "1")
+                        {
+                            Console.WriteLine("Node 1 cannot do sendsocket");
+                            break;
+                        }
+                        if (args[1] == null)
+                        {
+                            Console.WriteLine("Invalid arguments.");
+                            break;
+                        }
+
+                        var pingDst = args[1];
+                        for (int i = 0; i < 10; i++)
+                        {
+                            Sendsocket(pingDst);
+                            System.Threading.Thread.Sleep(1000);
+                        }
+
+                        Console.WriteLine("Finish sendsocket");
+                        break;
+                    case Operation.natsend:
+                        byte[] input;
+                        if (args[1] == null)
+                        {
+                            Console.WriteLine("Invalid arguments.");
+                            break;
+                        }
+                        if (File.Exists(args[1]))
+                        {
+                            BinaryReader inputStream = new BinaryReader(new FileStream(args[1], FileMode.Open, FileAccess.Read));
+                            input = inputStream.ReadBytes((int)inputStream.BaseStream.Length);
+                            inputStream.Close();
                         }
                         else
                         {
-                            UDPing(pingDest);
+                            Console.Write("Folder doesn't exist. Retry: ");
+                            break;
+                        }
+
+                        if (Node == "1")
+                        {
+                            var packet = ConstructUdp(input, args[2]);
+                            Console.WriteLine("sendfile to NAT");
+                            Modem.TransportData(2, packet.Bytes);
+                        }
+
+                        if (Node == "3")
+                        {
+                            Console.WriteLine("sendfile to NAT");
+                            SendUdp(input, args[2]);
                         }
                         break;
+                    case Operation.natrecv:
+                        if (Node == "2")
+                        {
+                            Console.WriteLine("Node 2 cannot do natrecv");
+                            break;
+                        }
+                        Natrecv = true;
+                        Console.CancelKeyPress += delegate (object sender, ConsoleCancelEventArgs e)
+                        {
+                            Natrecv = false;
+                        };
+                        while (Natrecv)
+                        {
+                        }
+                        Console.WriteLine("Exit natrecv");
+                        break;
+                    case Operation.ping:
+                        if (Node != "1")
+                        {
+                            Console.WriteLine("Do not support ping except Node 1");
+                            break;
+                        }
+
+                        break;
+                    default:
+                        break;
+
                 }
             }
         }
 
-        public bool IsValidIP(string ip)
+        public void Sendsocket(string destination)
         {
-            if (System.Text.RegularExpressions.Regex.IsMatch(ip, "[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}"))
+            var data = new byte[20];
+            var rand = new Random();
+            rand.NextBytes(data);
+            //var packet = ConstructUdpPacket(data, destination);
+            var joinedBytes = string.Join(", ", data.Select(b => b.ToString()));
+            Console.WriteLine($"Sending Packets to {destination}, data: {joinedBytes}");
+            SendUdp(data, destination);
+            //PrintUdpPacket(packet);
+            //Device.SendPacket(packet);
+        }
+
+        public UdpPacket ConstructUdpPacket(byte[] data, string destination)
+        {
+            var packet = new IPv4Packet(IPAddress.Parse(IP), IPAddress.Parse(destination));
+            Console.WriteLine(packet);
+            ByteArraySegment byteArraySegment = new ByteArraySegment(data);
+            var udpPacket = new UdpPacket(byteArraySegment, packet);
+            Console.WriteLine(udpPacket);
+            udpPacket.PayloadData = data;
+            PrintUdpPacket(udpPacket);
+            return udpPacket;
+        }
+
+        public void SendUdp(byte[] dgram, string destination)
+        {
+            //construct ethernet packet
+            var ethernet = new EthernetPacket(PhysicalAddress.Parse("112233445566"), PhysicalAddress.Parse("665544332211"), EthernetType.IPv4);
+            //construct local IPV4 packet
+            var ipv4 = new IPv4Packet(IPAddress.Parse(IP), IPAddress.Parse(destination));
+            ethernet.PayloadPacket = ipv4;
+            //construct UDP packet
+            var udp = new UdpPacket(12345, 54321);
+            //add data in
+            udp.PayloadData = dgram;
+            ipv4.PayloadPacket = udp;
+            // Console.WriteLine(ethernet);
+            Device.SendPacket(ethernet);
+        }
+
+        public void SendICMP( string destination)
+        {
+            //construct ethernet packet
+            var ethernet = new EthernetPacket(PhysicalAddress.Parse("112233445566"), PhysicalAddress.Parse("665544332211"), EthernetType.IPv4);
+            //construct local IPV4 packet
+            var ipv4 = new IPv4Packet(IPAddress.Parse(IP), IPAddress.Parse(destination));
+            ethernet.PayloadPacket = ipv4;
+            //construct ICMP packet
+            var icmp = new Ping();
+            //add data in
+            //udp.PayloadData = dgram;
+            //ipv4.PayloadPacket = icmp;
+            // Console.WriteLine(ethernet);
+            Device.SendPacket(ethernet);
+        }
+
+        public EthernetPacket ConstructUdp(byte[] dgram, string destination)
+        {
+            //construct ethernet packet
+            var ethernet = new EthernetPacket(PhysicalAddress.Parse("112233445566"), PhysicalAddress.Parse("665544332211"), EthernetType.IPv4);
+            //construct local IPV4 packet
+            var ipv4 = new IPv4Packet(IPAddress.Parse(IP), IPAddress.Parse(destination));
+            ethernet.PayloadPacket = ipv4;
+            //construct UDP packet
+            var udp = new UdpPacket(12345, 54321);
+            //add data in
+            udp.PayloadData = dgram;
+            ipv4.PayloadPacket = udp;
+            // Console.WriteLine(ethernet);
+            return ethernet;
+        }
+
+        public void OnPacketreceived(byte source, byte[] data)
+        {
+            if (Node == "1")
             {
-                string[] ips = ip.Split('.');
-                if (ips.Length == 4 || ips.Length == 6)
+                var packet = Packet.ParsePacket(LinkLayers.Ethernet, data);
+                if (packet == null)
                 {
-                    if (System.Int32.Parse(ips[0]) < 256 && System.Int32.Parse(ips[1]) < 256 & System.Int32.Parse(ips[2]) < 256 & System.Int32.Parse(ips[3]) < 256)
-                        return true;
-                    else
+                    Console.WriteLine("Parse packet error");
+                    return;
+                }
+                var ipPacket = packet.Extract<IPPacket>();
+                if (ipPacket == null)
+                {
+                    Console.WriteLine("Parse packet error");
+                    return;
+                }
+                var udpPacket = packet.Extract<UdpPacket>();
+                if (udpPacket != null)
+                {
+                    if (Natrecv)
                     {
-                        Console.WriteLine("IP invalid"); return false;
+                        Console.WriteLine(
+                            $"SourceIP: {ipPacket.SourceAddress}, DestinationIP: {ipPacket.DestinationAddress}, SourcePort: {udpPacket.SourcePort}, DestinationPort: {udpPacket.DestinationPort}");
+                        FileStream outFile = new FileStream("OUTPUT.bin", FileMode.OpenOrCreate, FileAccess.Write);
+                        outFile.SetLength(0);
+                        BinaryWriter writer = new BinaryWriter(outFile);
+                        writer.Write(udpPacket.PayloadData);
+                        writer.Close();
+                        Console.WriteLine("Natrecv OK\n");
+                        Natrecv = false;
                     }
                 }
-                else
+            }
+
+            if (Node == "2")
+            {
+                Console.WriteLine("Forward to Node 3");
+                Device.SendPacket(data);
+            }
+        }
+        public void PrintUdpPacket(UdpPacket udpPacket)
+        {
+            var ipPacket = udpPacket.Extract<IPPacket>();
+            if (ipPacket == null) return;
+            var _udpPacket = udpPacket.Extract<UdpPacket>();
+            if (_udpPacket != null)
+            {
+                if (Printsocketison && ipPacket.SourceAddress.ToString() == PrintsocketisonArg)
                 {
-                    Console.WriteLine("IP invalid"); return false;
+                    var joinedBytes = string.Join(", ", _udpPacket.PayloadData.Select(b => b.ToString()));
+                    Console.WriteLine(
+                        $"SourceIP: {ipPacket.SourceAddress}, DestinationIP: {ipPacket.DestinationAddress}, SourcePort: {_udpPacket.SourcePort}, DestinationPort: {_udpPacket.DestinationPort}, Payload: {joinedBytes}");
+                }
+            }
+        }
+
+        public void Device_OnPacketArrival(object s, PacketCapture e)
+        {
+
+            var packet = Packet.ParsePacket(e.GetPacket().LinkLayerType, e.GetPacket().Data);
+
+            var ipPacket = packet.Extract<IPPacket>();
+
+            if (ipPacket == null) { Console.WriteLine("Parse packet error"); return; }
+            var udpPacket = packet.Extract<UdpPacket>();
+            if (udpPacket != null)
+            {
+                if (Printsocketison && ipPacket.SourceAddress.ToString() == PrintsocketisonArg)
+                {
+                    var joinedBytes = string.Join(", ", udpPacket.PayloadData.Select(b => b.ToString()));
+                    Console.WriteLine(
+                        $"SourceIP: {ipPacket.SourceAddress}, DestinationIP: {ipPacket.DestinationAddress}, SourcePort: {udpPacket.SourcePort}, DestinationPort: {udpPacket.DestinationPort}, Payload: {joinedBytes}");
                 }
 
+                if (Node == "2 " && ipPacket.SourceAddress.ToString() == "192.168.1.2")
+                {
+                    var ethernet = packet.Extract<EthernetPacket>();
+                    if (ethernet != null)
+                    {
+                        Console.WriteLine("Forward to Node 1");
+                        Modem.TransportData(1, ethernet.Bytes);
+                    }
+                }
+
+                if (Node == "3" && Natrecv && ipPacket.SourceAddress.ToString() == "192.168.1.2")
+                {
+                    Console.WriteLine(
+                        $"SourceIP: {ipPacket.SourceAddress}, DestinationIP: {ipPacket.DestinationAddress}, SourcePort: {udpPacket.SourcePort}, DestinationPort: {udpPacket.DestinationPort}");
+                    FileStream outFile = new FileStream("OUTPUT.bin", FileMode.OpenOrCreate, FileAccess.Write);
+                    outFile.SetLength(0);
+                    BinaryWriter writer = new BinaryWriter(outFile);
+                    writer.Write(udpPacket.PayloadData);
+                    writer.Close();
+                    Console.WriteLine("Natrecv OK\n");
+                    Natrecv = false;
+                }
             }
-            else
+            var icmpPacket = packet.Extract<IcmpV4Packet>();
+            if (icmpPacket != null)
             {
-                Console.WriteLine("IP invalid"); return false;
+                Modem.TransportData(1,packet.Bytes);
             }
         }
 
-        public bool IsAthernetSubnet(string ipAddress)
+        
+
+        public void GetInterface()
         {
-            if (!IsValidIP(ipAddress))
-                return false;
-            var rangeC = IPAddressRange.Parse(AthernetInterface.Addresses);
 
 
-            return rangeC.Contains(IPAddress.Parse(ipAddress)) ;
-        }
 
-        public void UDPing(string pingDest)  // pingDest 一定合法
-        {
-            if (IsAthernetSubnet(pingDest))
-            {
-                // 通过声卡发
-                Console.WriteLine("Athernet");
-            }
-            else
-            {
-                // 通过网卡 (pcap) 发
-                Console.WriteLine("Ethernet");
-            }
-        }
+            Console.Write("Enter Node: ");
+            Node = Console.ReadLine();
+            Console.Write("Enter IP: ");
+            IP = Console.ReadLine();
+            var _devices = CaptureDeviceList.Instance;
+            foreach (var dev in _devices)
+                Console.WriteLine("{0}\n", dev.ToString());
+            Console.WriteLine("Choose the Ethernet Adapter");
+            var index = Int32.Parse(Console.ReadLine());
+            Device = LibPcapLiveDeviceList.Instance[index];
+            Console.WriteLine($"Choosing {Device.Name}");
 
-        public void getInterface()
-        {
-            Console.Write("Please enter network config file: ");
-            var configFile = Console.ReadLine();
-            var deserializer = new YamlDotNet.Serialization.DeserializerBuilder()
-    .WithNamingConvention(CamelCaseNamingConvention.Instance)
-    .Build();
-            Console.Write(File.ReadAllText(configFile));
-            var myconfig = deserializer.Deserialize<Interface>(File.ReadAllText(configFile));
-            AthernetInterface = myconfig; // problems here
-            //if (AthernetInterface.EthernerAdapter == null)
+            //string localIPAddress = "...";
+
+            //var devices = CaptureDeviceList.Instance;
+
+            //foreach (var dev in devices)
             //{
-            //    Console.WriteLine("114514");
-            //}
-            Console.WriteLine(AthernetInterface.Gateway4);
-            Console.WriteLine(AthernetInterface.Addresses);
-            Console.WriteLine(AthernetInterface.EthernetAdapter);
+            //    // Console.Out.WriteLine("{0}", dev.Description);
+
+            //    foreach (var addr in dev)
+            //    {
+            //        if (addr.Addr != null && addr.Addr.ipAddress != null)
+            //        {
+            //            Console.Out.WriteLine(addr.Addr.ipAddress);
+
+            //            if (localIPAddress == addr.Addr.ipAddress.ToString())
+            //            {
+            //                Console.Out.WriteLine("Capture device found");
+            //            }
+            //        }
+            //    }
         }
 
 
@@ -180,24 +449,25 @@ namespace Native_Modem
             }
             Protocol protocol = Protocol.ReadFromFile(Path.Combine(workFolder, "protocol.conf"));
             //Console.WriteLine("Please enter your MAC address (in decimal): ");
-            var rand = new Random();
-            byte address = (byte)rand.Next(255);  // 1.广播，这样只要保证两个 mac 不一样就行了 2. 建立 mac - ip 表
+            byte address = 0;
+            switch (Node)
+            {
+                case "1":
+                    address = 1;
+                    break;
+                case "2":
+                    address = 2;
+                    break;
+            }
 
             //while (!byte.TryParse(Console.ReadLine(), out address))
             //{
             //    Console.WriteLine("MAC address invalid. It should be an integer in [0, 255]. Please try again: ");
             //}
 
-            modem = new FullDuplexModem(protocol,
+            Modem = new FullDuplexModem(protocol,
                 address,
-                (source, data) =>
-                {
-                    FileStream outFile = new FileStream(Path.Combine(workFolder, "OUTPUT.bin"), FileMode.OpenOrCreate, FileAccess.Write);
-                    outFile.SetLength(0);
-                    BinaryWriter writer = new BinaryWriter(outFile);
-                    writer.Write(data);
-                    writer.Close();
-                },
+                OnPacketreceived,
                 info =>
                 {
                     Console.Write($"\r{info}\n> ");
@@ -206,6 +476,7 @@ namespace Native_Modem
                 protocol.RecordRx ? Path.Combine(workFolder, "receiverRecord.wav") : null);
 
             Console.WriteLine("Modem started, please type in commands.");
+
         }
 
 

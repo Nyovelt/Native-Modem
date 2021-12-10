@@ -1,4 +1,5 @@
-﻿using SharpPcap;
+﻿using PacketDotNet;
+using SharpPcap;
 using SharpPcap.LibPcap;
 using System;
 using System.Collections.Generic;
@@ -13,8 +14,8 @@ namespace Native_Modem
         [STAThread]
         static void Main()
         {
-            test();
-            //var ipprotocal = new IPProtocal();
+            //test();
+            var dummy = new IpProtocal();
 
             // FullDuplexModem();
             
@@ -30,11 +31,24 @@ namespace Native_Modem
             GenInput,
             Quit
         }
-
+            
         static void Device_OnPacketArrival(object s, PacketCapture e)
         {
-            Console.WriteLine(e.GetPacket());
+
+            var packet = Packet.ParsePacket(e.GetPacket().LinkLayerType, e.GetPacket().Data);
+         
+            var ipPacket = packet.Extract<IPPacket>();
+            //Console.WriteLine(packet);
+            if (ipPacket != null)
+            {
+                Console.WriteLine(ipPacket.SourceAddress);
+            }
+
+
+
         }
+
+
 
         static void test()
         {
@@ -47,10 +61,12 @@ namespace Native_Modem
             device.Open();
             device.OnPacketArrival += Device_OnPacketArrival;
             device.StartCapture();
+            
             for (; ; )
             {}
         }
 
+        
 
         static readonly Dictionary<Operation, string[]> ARGUMENTS = new Dictionary<Operation, string[]>(
             new KeyValuePair<Operation, string[]>[]
