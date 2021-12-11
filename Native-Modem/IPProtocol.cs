@@ -12,6 +12,7 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.NetworkInformation;
+using System.Text;
 using PacketDotNet.Utils;
 using YamlDotNet.Serialization.NamingConventions;
 
@@ -46,6 +47,7 @@ namespace Native_Modem
             Device.Open();
             Device.OnPacketArrival += Device_OnPacketArrival;
             Device.StartCapture();
+            //SendICMP("192.168.18.1");
             if (Node is "1" or "2")
                 startFullDuplexModem();
             Shell();
@@ -252,19 +254,27 @@ namespace Native_Modem
             Device.SendPacket(ethernet);
         }
 
-        public void SendICMP( string destination)
+        public void SendICMP(string destination)
         {
             //construct ethernet packet
             var ethernet = new EthernetPacket(PhysicalAddress.Parse("112233445566"), PhysicalAddress.Parse("665544332211"), EthernetType.IPv4);
             //construct local IPV4 packet
             var ipv4 = new IPv4Packet(IPAddress.Parse(IP), IPAddress.Parse(destination));
-            ethernet.PayloadPacket = ipv4;
-            //construct ICMP packet
-            var icmp = new Ping();
+            //ethernet.PayloadPacket = ipv4;
+            const string cmdString = "Hello CS120";
+            var sendBuffer = Encoding.ASCII.GetBytes(cmdString);
+            var udp = new UdpPacket(12345, 54321);
+            udp.PayloadData = sendBuffer;
+            var icmp = new IcmpV4Packet(new ByteArraySegment(sendBuffer));
+            icmp.TypeCode = IcmpV4TypeCode.EchoRequest;
+            icmp.Sequence = 1;
+            icmp.UpdateCalculatedValues();
             //add data in
             //udp.PayloadData = dgram;
-            //ipv4.PayloadPacket = icmp;
+            ipv4.PayloadPacket = icmp;
             // Console.WriteLine(ethernet);
+            ethernet.PayloadPacket = ipv4;
+            ethernet.UpdateCalculatedValues();
             Device.SendPacket(ethernet);
         }
 
@@ -347,11 +357,11 @@ namespace Native_Modem
 
             var ipPacket = packet.Extract<IPPacket>();
 
-            if (ipPacket == null) { Console.WriteLine("Parse packet error"); return; }
+            if (ipPacket == null) { return; }
             var udpPacket = packet.Extract<UdpPacket>();
             if (udpPacket != null)
             {
-                if (Printsocketison && ipPacket.SourceAddress.ToString() == PrintsocketisonArg)
+                if (Printsocketison && ipPacket.SourceAddress.ToString() == PrintsocketisonArg && ipPacket.SourceAddress.ToString() == IP)
                 {
                     var joinedBytes = string.Join(", ", udpPacket.PayloadData.Select(b => b.ToString()));
                     Console.WriteLine(
@@ -384,11 +394,12 @@ namespace Native_Modem
             var icmpPacket = packet.Extract<IcmpV4Packet>();
             if (icmpPacket != null)
             {
-                Modem.TransportData(1,packet.Bytes);
+                if (Node == "2")
+                    Modem.TransportData(1, packet.Bytes);
             }
         }
 
-        
+
 
         public void GetInterface()
         {
