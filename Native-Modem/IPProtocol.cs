@@ -460,18 +460,13 @@ namespace Native_Modem
                 }
 
                 var icmpPacket = packet.Extract<IcmpV4Packet>();
-                if (icmpPacket != null)
+                if (icmpPacket is {TypeCode: IcmpV4TypeCode.EchoRequest or IcmpV4TypeCode.EchoReply})
                 {
-                    if (icmpPacket.TypeCode is  IcmpV4TypeCode.EchoRequest or IcmpV4TypeCode.EchoReply)
-                    {
-                        var s = new Socket(AddressFamily.InterNetwork,
-                            SocketType.Raw, ProtocolType.Icmp);
-                        s.Bind(new IPEndPoint(IPAddress.Parse(IP), 12345));
-                        s.SendTo(icmpPacket.Bytes, new IPEndPoint( ipPacket.DestinationAddress, 54321));
-                        s.Close();
-                    }
-
-                    
+                    var s = new Socket(AddressFamily.InterNetwork,
+                        SocketType.Raw, ProtocolType.Icmp);
+                    s.Bind(new IPEndPoint(IPAddress.Parse(IP), 12345));
+                    s.SendTo(icmpPacket.Bytes, new IPEndPoint( ipPacket.DestinationAddress, 54321));
+                    s.Close();
                 }
                 Console.WriteLine("Forward Success");
             }
@@ -535,7 +530,7 @@ namespace Native_Modem
             var icmpPacket = packet.Extract<IcmpV4Packet>();
             if (icmpPacket != null)
             {
-                if (Node == "2")
+                if (Node == "2" && ipPacket.DestinationAddress.ToString()  == IP)
                 {
                     if (icmpPacket.TypeCode == IcmpV4TypeCode.EchoReply)
                     {
@@ -614,7 +609,7 @@ namespace Native_Modem
                 OnPacketreceived,
                 info =>
                 {
-                    //Console.Write($"\r{info}\n> ");
+                    Console.Write($"\r{info}\n> ");
                 },
                 protocol.RecordTx ? Path.Combine(workFolder, "transportRecord.wav") : null,
                 protocol.RecordRx ? Path.Combine(workFolder, "receiverRecord.wav") : null);
