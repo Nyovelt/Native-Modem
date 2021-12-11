@@ -56,14 +56,20 @@ namespace Native_Modem
             //var s = new Socket(AddressFamily.InterNetwork,
             //    SocketType.Raw, ProtocolType.Icmp);
             //s.Bind(new IPEndPoint(IPAddress.Parse(IP), 12345));
-            //byte[] buffer = new byte[32];
-            //var t = new IcmpV4Packet(new ByteArraySegment(buffer));
-            //t.TypeCode = IcmpV4TypeCode.EchoRequest;
-            //t.Sequence = 1;
-            //t.Id = 1;
-            
-            //t.UpdateCalculatedValues();
-            //s.SendTo(t.Bytes, new IPEndPoint(IPAddress.Parse("192.168.18.111"), 54321));
+
+            //const string cmdString = "Hello CS120";
+            //var sendBuffer = Encoding.ASCII.GetBytes(cmdString);
+            //var headerBuffer = new byte[8];
+            //var icmp = new IcmpV4Packet(new ByteArraySegment(headerBuffer));
+            //icmp.TypeCode = IcmpV4TypeCode.EchoRequest;
+            //icmp.Sequence = 1;
+            //icmp.Id = 1;
+            //icmp.PayloadData = sendBuffer;
+            //icmp.Checksum = 0;
+            //byte[] bytes = icmp.Bytes;
+            //icmp.Checksum = (ushort)ChecksumUtils.OnesComplementSum(bytes, 0, bytes.Length);
+
+            //s.SendTo(icmp.Bytes, new IPEndPoint(IPAddress.Parse("47.100.248.23"), 54321));
             //s.Close();
             //return;
             if (Node is "1" or "2")
@@ -332,16 +338,16 @@ namespace Native_Modem
             var sendBuffer = Encoding.ASCII.GetBytes(cmdString);
             var headerBuffer = new byte[8];
 
-            var icmp = new IcmpV4Packet(new ByteArraySegment(headerBuffer), ipv4);
+            var icmp = new IcmpV4Packet(new ByteArraySegment(headerBuffer));
+            ipv4.PayloadPacket = icmp;
             icmp.TypeCode = icmpV4TypeCode;
+            icmp.Checksum = 0;
             icmp.Sequence = 1;
             icmp.Id = 1;
             icmp.PayloadData = sendBuffer;
-            ipv4.PayloadPacket = icmp;
-            icmp.UpdateCalculatedValues();
-
+            byte[] bytes = icmp.Bytes;
+            icmp.Checksum = (ushort)ChecksumUtils.OnesComplementSum(bytes, 0, bytes.Length);
             ipv4.UpdateCalculatedValues();
-
             ethernet.UpdateCalculatedValues();
             return ethernet;
         }
