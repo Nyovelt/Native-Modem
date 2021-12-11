@@ -12,9 +12,11 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.NetworkInformation;
+using System.Net.Sockets;
 using System.Text;
 using PacketDotNet.Utils;
 using YamlDotNet.Serialization.NamingConventions;
+using ProtocolType = System.Net.Sockets.ProtocolType;
 
 namespace Native_Modem
 {
@@ -238,20 +240,28 @@ namespace Native_Modem
             return udpPacket;
         }
 
-        public void SendUdp(byte[] dgram, string destination)
+        public void SendUdp(byte[] dgram, string  destination)
         {
-            //construct ethernet packet
-            var ethernet = new EthernetPacket(PhysicalAddress.Parse("112233445566"), PhysicalAddress.Parse("665544332211"), EthernetType.IPv4);
-            //construct local IPV4 packet
-            var ipv4 = new IPv4Packet(IPAddress.Parse(IP), IPAddress.Parse(destination));
-            ethernet.PayloadPacket = ipv4;
-            //construct UDP packet
-            var udp = new UdpPacket(12345, 54321);
-            //add data in
-            udp.PayloadData = dgram;
-            ipv4.PayloadPacket = udp;
-            // Console.WriteLine(ethernet);
-            Device.SendPacket(ethernet);
+            ////construct ethernet packet
+            //var ethernet = new EthernetPacket(Device.MacAddress, PhysicalAddress.Parse("665544332211"), EthernetType.IPv4);
+            ////construct local IPV4 packet
+            //var ipv4 = new IPv4Packet(IPAddress.Parse(IP), IPAddress.Parse(destination));
+            ////construct UDP packet
+            //var udp = new UdpPacket(12345, 54321);
+            ////add data in
+            //udp.PayloadData = dgram;
+            //udp.UpdateCalculatedValues();
+            //ipv4.PayloadPacket = udp;
+            //ipv4.UpdateCalculatedValues();
+            //ethernet.PayloadPacket = ipv4;
+            //ethernet.UpdateCalculatedValues();
+            //// Console.WriteLine(ethernet);
+            //Device.SendPacket(ethernet);
+            var server = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
+            server.Bind(new IPEndPoint(IPAddress.Parse(IP), 12345));
+            var endpoint = new IPEndPoint(IPAddress.Parse(destination), 54321);
+            server.SendTo(dgram, endpoint);
+
         }
 
         public void SendICMP(string destination)
@@ -361,7 +371,7 @@ namespace Native_Modem
             var udpPacket = packet.Extract<UdpPacket>();
             if (udpPacket != null)
             {
-                if (Printsocketison && ipPacket.SourceAddress.ToString() == PrintsocketisonArg && ipPacket.SourceAddress.ToString() == IP)
+                if (Printsocketison && ipPacket.SourceAddress.ToString() == PrintsocketisonArg && ipPacket.DestinationAddress.ToString() == IP)
                 {
                     var joinedBytes = string.Join(", ", udpPacket.PayloadData.Select(b => b.ToString()));
                     Console.WriteLine(
@@ -403,9 +413,6 @@ namespace Native_Modem
 
         public void GetInterface()
         {
-
-
-
             Console.Write("Enter Node: ");
             Node = Console.ReadLine();
             Console.Write("Enter IP: ");
