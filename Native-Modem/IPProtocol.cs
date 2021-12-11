@@ -113,8 +113,8 @@ namespace Native_Modem
 
         public void Dispose()
         {
-            Device.Dispose();
-            Device.Close();
+            Device?.Dispose();
+            Device?.Close();
         }
 
         public void Shell()
@@ -437,7 +437,7 @@ namespace Native_Modem
                             //var sendBuffer = Encoding.ASCII.GetBytes(cmdString);
                             var headerBuffer = new byte[8];
 
-                            var icmp = new IcmpV4Packet(icmpPacket.PayloadDataSegment);
+                            var icmp = new IcmpV4Packet(new ByteArraySegment(headerBuffer));
                             ipv4.PayloadPacket = icmp;
                             icmp.TypeCode = IcmpV4TypeCode.EchoReply;
                             icmp.Checksum = 0;
@@ -495,12 +495,14 @@ namespace Native_Modem
                     Console.WriteLine(icmpPacket.ToString());
                     var s = new Socket(AddressFamily.InterNetwork,
                         SocketType.Raw, ProtocolType.Icmp);
-                    s.Bind(new IPEndPoint(IPAddress.Parse(IP),
-                        new Random().Next(20000, 65536)));
+                    var a = new Random().Next(20000, 65536);
+                    var b = new Random().Next(20000, 65536);
+                    s.Bind(new IPEndPoint(IPAddress.Parse(IP),a
+                        ));
                     Debug.Assert(icmpPacket != null, nameof(icmpPacket) + " != null");
                     s.SendTo(icmpPacket.Bytes,
                         new IPEndPoint(ipPacket.DestinationAddress,
-                            new Random().Next(20000, 65536)));
+                            b));
                     s.Close();
                 }
                 Console.WriteLine("Forward Success");
