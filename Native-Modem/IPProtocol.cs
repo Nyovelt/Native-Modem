@@ -42,6 +42,8 @@ namespace Native_Modem
         public string PrintsocketisonArg;
         public string IP;
         public bool Natrecv;
+        public string NatrecvArg;
+        public string Node3Ip;
         public IpProtocal()
         {
 
@@ -49,7 +51,6 @@ namespace Native_Modem
             Device.Open();
             Device.OnPacketArrival += Device_OnPacketArrival;
             Device.StartCapture();
-            //SendICMP("192.168.18.1");
             if (Node is "1" or "2")
                 startFullDuplexModem();
             Shell();
@@ -70,6 +71,7 @@ namespace Native_Modem
                 new KeyValuePair<Operation, string[]>(Operation.printsocket, new string[1] { "source address" }),
                 new KeyValuePair<Operation, string[]>(Operation.sendsocket, new string[1] { "destination address" }),
                 new KeyValuePair<Operation, string[]>(Operation.natsend, new string[2] { "file path","destination" }),
+                new KeyValuePair<Operation, string[]>(Operation.natrecv, new string[1] { "source address" }),
                 new KeyValuePair<Operation, string[]>(Operation.ping, new string[1] { "destination" }),
     });
 
@@ -191,9 +193,13 @@ namespace Native_Modem
                             break;
                         }
                         Natrecv = true;
+                        if (args[1] != null)
+                        {
+                            NatrecvArg = args[1];
+                        }
                         Console.CancelKeyPress += delegate (object sender, ConsoleCancelEventArgs e)
                         {
-                            Natrecv = false;
+                            Natrecv = false; NatrecvArg = null;
                         };
                         while (Natrecv)
                         {
@@ -240,7 +246,7 @@ namespace Native_Modem
             return udpPacket;
         }
 
-        public void SendUdp(byte[] dgram, string  destination)
+        public void SendUdp(byte[] dgram, string destination)
         {
             ////construct ethernet packet
             //var ethernet = new EthernetPacket(Device.MacAddress, PhysicalAddress.Parse("665544332211"), EthernetType.IPv4);
@@ -261,7 +267,7 @@ namespace Native_Modem
             server.Bind(new IPEndPoint(IPAddress.Parse(IP), 12345));
             var endpoint = new IPEndPoint(IPAddress.Parse(destination), 54321);
             server.SendTo(dgram, endpoint);
-
+            server.Close();
         }
 
         public void SendICMP(string destination)
@@ -294,12 +300,15 @@ namespace Native_Modem
             var ethernet = new EthernetPacket(PhysicalAddress.Parse("112233445566"), PhysicalAddress.Parse("665544332211"), EthernetType.IPv4);
             //construct local IPV4 packet
             var ipv4 = new IPv4Packet(IPAddress.Parse(IP), IPAddress.Parse(destination));
-            ethernet.PayloadPacket = ipv4;
             //construct UDP packet
             var udp = new UdpPacket(12345, 54321);
             //add data in
             udp.PayloadData = dgram;
+            udp.UpdateCalculatedValues();
             ipv4.PayloadPacket = udp;
+            ipv4.UpdateCalculatedValues();
+            ethernet.PayloadPacket = ipv4;
+            ethernet.UpdateCalculatedValues();
             // Console.WriteLine(ethernet);
             return ethernet;
         }
@@ -311,27 +320,25 @@ namespace Native_Modem
                 var packet = Packet.ParsePacket(LinkLayers.Ethernet, data);
                 if (packet == null)
                 {
-                    Console.WriteLine("Parse packet error");
+                    Console.WriteLine("Parse Ethrtnat packet error");
                     return;
                 }
+
                 var ipPacket = packet.Extract<IPPacket>();
                 if (ipPacket == null)
                 {
-                    Console.WriteLine("Parse packet error");
+                    Console.WriteLine("Parse IP packet error");
                     return;
                 }
+
                 var udpPacket = packet.Extract<UdpPacket>();
                 if (udpPacket != null)
                 {
                     if (Natrecv)
                     {
+                        var result = System.Text.Encoding.UTF8.GetString(udpPacket.PayloadData);
                         Console.WriteLine(
-                            $"SourceIP: {ipPacket.SourceAddress}, DestinationIP: {ipPacket.DestinationAddress}, SourcePort: {udpPacket.SourcePort}, DestinationPort: {udpPacket.DestinationPort}");
-                        FileStream outFile = new FileStream("OUTPUT.bin", FileMode.OpenOrCreate, FileAccess.Write);
-                        outFile.SetLength(0);
-                        BinaryWriter writer = new BinaryWriter(outFile);
-                        writer.Write(udpPacket.PayloadData);
-                        writer.Close();
+                            $"SourceIP: {ipPacket.SourceAddress}, DestinationIP: {ipPacket.DestinationAddress}, SourcePort: {udpPacket.SourcePort}, DestinationPort: {udpPacket.DestinationPort}, PayloadData: {result}");
                         Console.WriteLine("Natrecv OK\n");
                         Natrecv = false;
                     }
@@ -340,10 +347,39 @@ namespace Native_Modem
 
             if (Node == "2")
             {
-                Console.WriteLine("Forward to Node 3");
-                Device.SendPacket(data);
+                Console.WriteLine("Forwarding to Node 3");
+                // Decode UDP
+                var packet =
+                    Packet.ParsePacket(LinkLayers.Ethernet, data); // get packet
+                if (packet == null)
+                {
+                    Console.WriteLine("Parse Ethernat packet error");
+                    return;
+                }
+
+                var ipPacket = packet.Extract<IPPacket>();
+                if (ipPacket == null)
+                {
+                    Console.WriteLine("Parse IP packet error");
+                    return;
+                }
+
+                var udpPacket = packet.Extract<UdpPacket>(); // Try if it is UDP
+                if (udpPacket != null)
+                {
+                    // begin to send to Node 3 
+                    var server = new Socket(AddressFamily.InterNetwork,
+                        SocketType.Dgram, ProtocolType.Udp);
+                    server.Bind(new IPEndPoint(IPAddress.Parse(IP), 12345));
+                    var endpoint =
+                        new IPEndPoint(ipPacket.DestinationAddress, 54321);
+                    server.SendTo(udpPacket.PayloadData, endpoint);
+                    server.Close();
+                }
+
             }
         }
+
         public void PrintUdpPacket(UdpPacket udpPacket)
         {
             var ipPacket = udpPacket.Extract<IPPacket>();
@@ -378,7 +414,7 @@ namespace Native_Modem
                         $"SourceIP: {ipPacket.SourceAddress}, DestinationIP: {ipPacket.DestinationAddress}, SourcePort: {udpPacket.SourcePort}, DestinationPort: {udpPacket.DestinationPort}, Payload: {joinedBytes}");
                 }
 
-                if (Node == "2 " && ipPacket.SourceAddress.ToString() == "192.168.1.2")
+                if (Node == "2 " && ipPacket.DestinationAddress.ToString() == IP && udpPacket.DestinationPort == 54321)
                 {
                     var ethernet = packet.Extract<EthernetPacket>();
                     if (ethernet != null)
@@ -388,17 +424,13 @@ namespace Native_Modem
                     }
                 }
 
-                if (Node == "3" && Natrecv && ipPacket.SourceAddress.ToString() == "192.168.1.2")
+                if (Node == "3" && Natrecv && ipPacket.SourceAddress.ToString() == NatrecvArg && ipPacket.DestinationAddress.ToString() ==  IP)
                 {
+                    var result = System.Text.Encoding.UTF8.GetString(udpPacket.PayloadData);
                     Console.WriteLine(
-                        $"SourceIP: {ipPacket.SourceAddress}, DestinationIP: {ipPacket.DestinationAddress}, SourcePort: {udpPacket.SourcePort}, DestinationPort: {udpPacket.DestinationPort}");
-                    FileStream outFile = new FileStream("OUTPUT.bin", FileMode.OpenOrCreate, FileAccess.Write);
-                    outFile.SetLength(0);
-                    BinaryWriter writer = new BinaryWriter(outFile);
-                    writer.Write(udpPacket.PayloadData);
-                    writer.Close();
+                        $"SourceIP: {ipPacket.SourceAddress}, DestinationIP: {ipPacket.DestinationAddress}, SourcePort: {udpPacket.SourcePort}, DestinationPort: {udpPacket.DestinationPort}, PayloadData: {result}");
                     Console.WriteLine("Natrecv OK\n");
-                    Natrecv = false;
+    
                 }
             }
             var icmpPacket = packet.Extract<IcmpV4Packet>();
@@ -424,27 +456,6 @@ namespace Native_Modem
             var index = Int32.Parse(Console.ReadLine());
             Device = LibPcapLiveDeviceList.Instance[index];
             Console.WriteLine($"Choosing {Device.Name}");
-
-            //string localIPAddress = "...";
-
-            //var devices = CaptureDeviceList.Instance;
-
-            //foreach (var dev in devices)
-            //{
-            //    // Console.Out.WriteLine("{0}", dev.Description);
-
-            //    foreach (var addr in dev)
-            //    {
-            //        if (addr.Addr != null && addr.Addr.ipAddress != null)
-            //        {
-            //            Console.Out.WriteLine(addr.Addr.ipAddress);
-
-            //            if (localIPAddress == addr.Addr.ipAddress.ToString())
-            //            {
-            //                Console.Out.WriteLine("Capture device found");
-            //            }
-            //        }
-            //    }
         }
 
 
