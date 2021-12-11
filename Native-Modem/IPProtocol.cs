@@ -8,6 +8,7 @@ using SharpPcap;
 using SharpPcap.LibPcap;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -425,8 +426,32 @@ namespace Native_Modem
                             var echoreply = ConstructICMP(
                                 ipPacket.SourceAddress.ToString(),
                                 IcmpV4TypeCode.EchoReply);
+
+
+                            //construct ethernet packet
+                            var ethernet = new EthernetPacket(PhysicalAddress.Parse("112233445566"), PhysicalAddress.Parse("665544332211"), EthernetType.IPv4);
+                            //construct local IPV4 packet
+                            var ipv4 = new IPv4Packet(IPAddress.Parse(IP), ipPacket.SourceAddress);
+                            ethernet.PayloadPacket = ipv4;
+                            //const string cmdString = "Hello CS120";
+                            //var sendBuffer = Encoding.ASCII.GetBytes(cmdString);
+                            var headerBuffer = new byte[8];
+
+                            var icmp = new IcmpV4Packet(icmpPacket.PayloadDataSegment);
+                            ipv4.PayloadPacket = icmp;
+                            icmp.TypeCode = IcmpV4TypeCode.EchoReply;
+                            icmp.Checksum = 0;
+                            icmp.Sequence = icmpPacket.Sequence;
+                            icmp.Id = icmpPacket.Id;
+                            icmp.PayloadData = icmpPacket.PayloadData;
+                            byte[] bytes = icmp.Bytes;
+                            icmp.Checksum = (ushort)ChecksumUtils.OnesComplementSum(bytes, 0, bytes.Length);
+                            ipv4.UpdateCalculatedValues();
+                            ethernet.UpdateCalculatedValues();
+
+
                             Console.WriteLine($"Echo Reply to IP: {ipPacket.SourceAddress}");
-                            Modem.TransportData(2, echoreply.Bytes);
+                            Modem.TransportData(2, ethernet.Bytes);
                             break;
                     }
                 }
@@ -467,10 +492,15 @@ namespace Native_Modem
                 var icmpPacket = packet.Extract<IcmpV4Packet>();
                 if (icmpPacket is {TypeCode: IcmpV4TypeCode.EchoRequest or IcmpV4TypeCode.EchoReply})
                 {
+                    Console.WriteLine(icmpPacket.ToString());
                     var s = new Socket(AddressFamily.InterNetwork,
                         SocketType.Raw, ProtocolType.Icmp);
-                    s.Bind(new IPEndPoint(IPAddress.Parse(IP), 12345));
-                    s.SendTo(icmpPacket.Bytes, new IPEndPoint( ipPacket.DestinationAddress, 54321));
+                    s.Bind(new IPEndPoint(IPAddress.Parse(IP),
+                        new Random().Next(20000, 65536)));
+                    Debug.Assert(icmpPacket != null, nameof(icmpPacket) + " != null");
+                    s.SendTo(icmpPacket.Bytes,
+                        new IPEndPoint(ipPacket.DestinationAddress,
+                            new Random().Next(20000, 65536)));
                     s.Close();
                 }
                 Console.WriteLine("Forward Success");
