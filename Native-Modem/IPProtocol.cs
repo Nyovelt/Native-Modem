@@ -71,7 +71,7 @@ namespace Native_Modem
             //for (var i = 0; i < 10; i++)
             //{ SendICMP("192.168.18.111"); System.Threading.Thread.Sleep(1000); }
             Shell();
-
+            Modem?.Dispose();
         }
 
         private enum Operation
@@ -80,7 +80,8 @@ namespace Native_Modem
             sendsocket,
             natsend,
             natrecv,
-            ping
+            ping,
+            quit
         }
 
         private enum pingstate
@@ -97,6 +98,7 @@ namespace Native_Modem
                 new(Operation.natsend, new string[2] { "file path","destination" }),
                 new(Operation.natrecv, new string[1] { "source address" }),
                 new(Operation.ping, new string[1] { "destination" }),
+                new(Operation.quit, Array.Empty<string>())
     });
 
         ~IpProtocal()
@@ -108,8 +110,9 @@ namespace Native_Modem
 
         public void Shell()
         {
+            bool quit = false;
             // 寻找一个更好的交互式内建命令框架 // 失败
-            while (true)
+            while (!quit)
             {
                 Console.Write(">");
                 var args = Console.ReadLine()?.Split(' ');
@@ -241,6 +244,9 @@ namespace Native_Modem
                         Natping(args[1]);
 
 
+                        break;
+                    case Operation.quit:
+                        quit = true;
                         break;
                     default:
                         break;
@@ -514,7 +520,12 @@ namespace Native_Modem
             if (icmpPacket != null)
             {
                 if (Node == "2")
-                    Modem.TransportData(1, packet.Bytes);
+                {
+                    if (icmpPacket.TypeCode == IcmpV4TypeCode.EchoReply)
+                    {
+                        Modem.TransportData(1, packet.Bytes);
+                    }
+                }
             }
         }
 
