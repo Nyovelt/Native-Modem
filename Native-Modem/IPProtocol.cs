@@ -50,9 +50,7 @@ namespace Native_Modem
         {
 
             GetInterface(); // 获得 ip 配置
-            Device.Open();
-            Device.OnPacketArrival += Device_OnPacketArrival;
-            Device.StartCapture();
+
             //var s = new Socket(AddressFamily.InterNetwork,
             //    SocketType.Raw, ProtocolType.Icmp);
             //s.Bind(new IPEndPoint(IPAddress.Parse(IP), 12345));
@@ -72,6 +70,11 @@ namespace Native_Modem
             //s.SendTo(icmp.Bytes, new IPEndPoint(IPAddress.Parse("47.100.248.23"), 54321));
             //s.Close();
             //return;
+
+            Device?.Open();
+            if (Device != null)
+                Device.OnPacketArrival += Device_OnPacketArrival;
+            Device?.StartCapture();
             if (Node is "1" or "2")
                 startFullDuplexModem();
             //for (var i = 0; i < 10; i++)
@@ -275,6 +278,7 @@ namespace Native_Modem
             };
             dateTime = DateTime.Now;
             Timer.Start();
+            Console.WriteLine($"Ping {destination}");
             Modem.TransportData(2, data);
         }
 
@@ -421,6 +425,7 @@ namespace Native_Modem
                             var echoreply = ConstructICMP(
                                 ipPacket.SourceAddress.ToString(),
                                 IcmpV4TypeCode.EchoReply);
+                            Console.WriteLine($"Echo Reply to IP: {ipPacket.SourceAddress}");
                             Modem.TransportData(2, echoreply.Bytes);
                             break;
                     }
@@ -558,14 +563,16 @@ namespace Native_Modem
             {
                 Console.Write("Enter IP: ");
                 IP = Console.ReadLine();
+
+                var _devices = CaptureDeviceList.Instance;
+                foreach (var dev in _devices)
+                    Console.WriteLine("{0}\n", dev.ToString());
+                Console.WriteLine("Choose the Ethernet Adapter");
+                var index = Int32.Parse(Console.ReadLine());
+                Device = LibPcapLiveDeviceList.Instance[index];
+                Console.WriteLine($"Choosing {Device.Name}");
+
             }
-            var _devices = CaptureDeviceList.Instance;
-            foreach (var dev in _devices)
-                Console.WriteLine("{0}\n", dev.ToString());
-            Console.WriteLine("Choose the Ethernet Adapter");
-            var index = Int32.Parse(Console.ReadLine());
-            Device = LibPcapLiveDeviceList.Instance[index];
-            Console.WriteLine($"Choosing {Device.Name}");
         }
 
 
