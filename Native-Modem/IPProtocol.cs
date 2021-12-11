@@ -15,9 +15,8 @@ using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Text;
 using PacketDotNet.Utils;
-using YamlDotNet.Serialization.NamingConventions;
 using ProtocolType = System.Net.Sockets.ProtocolType;
-
+using System.Timers;
 namespace Native_Modem
 {
 
@@ -44,6 +43,9 @@ namespace Native_Modem
         public bool Natrecv;
         public string NatrecvArg;
         public string Node3Ip;
+        private pingstate pingstat;
+        public Timer Timer;
+        private DateTime dateTime;
         public IpProtocal()
         {
 
@@ -51,9 +53,25 @@ namespace Native_Modem
             Device.Open();
             Device.OnPacketArrival += Device_OnPacketArrival;
             Device.StartCapture();
+            //var s = new Socket(AddressFamily.InterNetwork,
+            //    SocketType.Raw, ProtocolType.Icmp);
+            //s.Bind(new IPEndPoint(IPAddress.Parse(IP), 12345));
+            //byte[] buffer = new byte[32];
+            //var t = new IcmpV4Packet(new ByteArraySegment(buffer));
+            //t.TypeCode = IcmpV4TypeCode.EchoRequest;
+            //t.Sequence = 1;
+            //t.Id = 1;
+            
+            //t.UpdateCalculatedValues();
+            //s.SendTo(t.Bytes, new IPEndPoint(IPAddress.Parse("192.168.18.111"), 54321));
+            //s.Close();
+            //return;
             if (Node is "1" or "2")
                 startFullDuplexModem();
+            //for (var i = 0; i < 10; i++)
+            //{ SendICMP("192.168.18.111"); System.Threading.Thread.Sleep(1000); }
             Shell();
+
         }
 
         private enum Operation
@@ -65,14 +83,20 @@ namespace Native_Modem
             ping
         }
 
-        static readonly Dictionary<Operation, string[]> Arguments = new Dictionary<Operation, string[]>(
+        private enum pingstate
+        {
+            Waitforecho,
+            Idle
+        }
+
+        static readonly Dictionary<Operation, string[]> Arguments = new(
     new KeyValuePair<Operation, string[]>[]
     {
-                new KeyValuePair<Operation, string[]>(Operation.printsocket, new string[1] { "source address" }),
-                new KeyValuePair<Operation, string[]>(Operation.sendsocket, new string[1] { "destination address" }),
-                new KeyValuePair<Operation, string[]>(Operation.natsend, new string[2] { "file path","destination" }),
-                new KeyValuePair<Operation, string[]>(Operation.natrecv, new string[1] { "source address" }),
-                new KeyValuePair<Operation, string[]>(Operation.ping, new string[1] { "destination" }),
+                new(Operation.printsocket, new string[1] { "source address" }),
+                new(Operation.sendsocket, new string[1] { "destination address" }),
+                new(Operation.natsend, new string[2] { "file path","destination" }),
+                new(Operation.natrecv, new string[1] { "source address" }),
+                new(Operation.ping, new string[1] { "destination" }),
     });
 
         ~IpProtocal()
@@ -213,12 +237,34 @@ namespace Native_Modem
                             break;
                         }
 
+
+                        Natping(args[1]);
+
+
                         break;
                     default:
                         break;
 
                 }
             }
+        }
+
+        private void Natping(string destination)
+        {
+            var data = ConstructICMP(destination,
+                IcmpV4TypeCode.EchoRequest).Bytes;
+            pingstat = pingstate.Waitforecho;
+            Timer = new Timer();
+            Timer.Interval = 3000d;
+            Timer.AutoReset = false;
+            Timer.Elapsed += (sender, e) =>
+            {
+                Console.WriteLine("ping timed out");
+                pingstat = pingstate.Idle;
+            };
+            dateTime = DateTime.Now;
+            Timer.Start();
+            Modem.TransportData(2, data);
         }
 
         public void Sendsocket(string destination)
@@ -270,7 +316,7 @@ namespace Native_Modem
             server.Close();
         }
 
-        public void SendICMP(string destination)
+        public EthernetPacket ConstructICMP(string destination, IcmpV4TypeCode icmpV4TypeCode)
         {
             //construct ethernet packet
             var ethernet = new EthernetPacket(PhysicalAddress.Parse("112233445566"), PhysicalAddress.Parse("665544332211"), EthernetType.IPv4);
@@ -279,19 +325,15 @@ namespace Native_Modem
             //ethernet.PayloadPacket = ipv4;
             const string cmdString = "Hello CS120";
             var sendBuffer = Encoding.ASCII.GetBytes(cmdString);
-            var udp = new UdpPacket(12345, 54321);
-            udp.PayloadData = sendBuffer;
             var icmp = new IcmpV4Packet(new ByteArraySegment(sendBuffer));
-            icmp.TypeCode = IcmpV4TypeCode.EchoRequest;
+            icmp.TypeCode = icmpV4TypeCode;
             icmp.Sequence = 1;
             icmp.UpdateCalculatedValues();
-            //add data in
-            //udp.PayloadData = dgram;
             ipv4.PayloadPacket = icmp;
-            // Console.WriteLine(ethernet);
+            ipv4.UpdateCalculatedValues();
             ethernet.PayloadPacket = ipv4;
             ethernet.UpdateCalculatedValues();
-            Device.SendPacket(ethernet);
+            return ethernet;
         }
 
         public EthernetPacket ConstructUdp(byte[] dgram, string destination)
@@ -336,11 +378,31 @@ namespace Native_Modem
                 {
                     if (Natrecv)
                     {
-                        var result = System.Text.Encoding.UTF8.GetString(udpPacket.PayloadData);
+                        var result = Encoding.UTF8.GetString(udpPacket.PayloadData);
                         Console.WriteLine(
                             $"SourceIP: {ipPacket.SourceAddress}, DestinationIP: {ipPacket.DestinationAddress}, SourcePort: {udpPacket.SourcePort}, DestinationPort: {udpPacket.DestinationPort}, PayloadData: {result}");
                         Console.WriteLine("Natrecv OK\n");
                         Natrecv = false;
+                    }
+                }
+
+                var icmpPacket = packet.Extract<IcmpV4Packet>();
+                if (icmpPacket != null)
+                {
+                    switch (icmpPacket.TypeCode)
+                    {
+                        case IcmpV4TypeCode.EchoReply:
+                            if (pingstat == pingstate.Waitforecho)
+                            {
+                                Timer.Stop();
+                                var timeslap = (DateTime.Now - dateTime).TotalMilliseconds;
+                                var buffer = Encoding.UTF8.GetString(icmpPacket.PayloadData);
+                                Console.WriteLine($"Source IP: {ipPacket.SourceAddress}, Payload: {buffer}, latency: {timeslap} ms ");
+                                pingstat = pingstate.Idle;
+                            }
+                            break;
+                        case IcmpV4TypeCode.EchoRequest:
+                            break;
                     }
                 }
             }
@@ -377,6 +439,19 @@ namespace Native_Modem
                     server.Close();
                 }
 
+                var icmpPacket = packet.Extract<IcmpV4Packet>();
+                if (icmpPacket != null)
+                {
+                    if (icmpPacket.TypeCode == IcmpV4TypeCode.EchoRequest)
+                    {
+                        var s = new Socket(AddressFamily.InterNetwork,
+                            SocketType.Raw, ProtocolType.Icmp);
+                        s.Bind(new IPEndPoint(IPAddress.Parse(IP), 12345));
+                        s.SendTo(icmpPacket.Bytes, new IPEndPoint( ipPacket.DestinationAddress, 54321));
+                        s.Close();
+                    }
+                }
+                Console.WriteLine("Forward Success");
             }
         }
 
@@ -414,7 +489,7 @@ namespace Native_Modem
                         $"SourceIP: {ipPacket.SourceAddress}, DestinationIP: {ipPacket.DestinationAddress}, SourcePort: {udpPacket.SourcePort}, DestinationPort: {udpPacket.DestinationPort}, Payload: {joinedBytes}");
                 }
 
-                if (Node == "2 " && ipPacket.DestinationAddress.ToString() == IP && udpPacket.DestinationPort == 54321)
+                if (Node == "2" && ipPacket.DestinationAddress.ToString() == IP && udpPacket.DestinationPort == 54321)
                 {
                     var ethernet = packet.Extract<EthernetPacket>();
                     if (ethernet != null)
@@ -422,15 +497,17 @@ namespace Native_Modem
                         Console.WriteLine("Forward to Node 1");
                         Modem.TransportData(1, ethernet.Bytes);
                     }
+
+
                 }
 
-                if (Node == "3" && Natrecv && ipPacket.SourceAddress.ToString() == NatrecvArg && ipPacket.DestinationAddress.ToString() ==  IP)
+                if (Node == "3" && Natrecv && ipPacket.SourceAddress.ToString() == NatrecvArg && ipPacket.DestinationAddress.ToString() == IP)
                 {
                     var result = System.Text.Encoding.UTF8.GetString(udpPacket.PayloadData);
                     Console.WriteLine(
                         $"SourceIP: {ipPacket.SourceAddress}, DestinationIP: {ipPacket.DestinationAddress}, SourcePort: {udpPacket.SourcePort}, DestinationPort: {udpPacket.DestinationPort}, PayloadData: {result}");
                     Console.WriteLine("Natrecv OK\n");
-    
+
                 }
             }
             var icmpPacket = packet.Extract<IcmpV4Packet>();
@@ -447,8 +524,15 @@ namespace Native_Modem
         {
             Console.Write("Enter Node: ");
             Node = Console.ReadLine();
-            Console.Write("Enter IP: ");
-            IP = Console.ReadLine();
+            if (Node == "1")
+            {
+                IP = "192.168.1.2";
+            }
+            else
+            {
+                Console.Write("Enter IP: ");
+                IP = Console.ReadLine();
+            }
             var _devices = CaptureDeviceList.Instance;
             foreach (var dev in _devices)
                 Console.WriteLine("{0}\n", dev.ToString());
