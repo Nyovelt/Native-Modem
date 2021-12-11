@@ -266,7 +266,7 @@ namespace Native_Modem
                 IcmpV4TypeCode.EchoRequest).Bytes;
             pingstat = pingstate.Waitforecho;
             Timer = new Timer();
-            Timer.Interval = 3000d;
+            Timer.Interval = 10000d;
             Timer.AutoReset = false;
             Timer.Elapsed += (sender, e) =>
             {
@@ -418,6 +418,10 @@ namespace Native_Modem
                             }
                             break;
                         case IcmpV4TypeCode.EchoRequest:
+                            var echoreply = ConstructICMP(
+                                ipPacket.SourceAddress.ToString(),
+                                IcmpV4TypeCode.EchoReply);
+                            Modem.TransportData(2, echoreply.Bytes);
                             break;
                     }
                 }
@@ -458,7 +462,7 @@ namespace Native_Modem
                 var icmpPacket = packet.Extract<IcmpV4Packet>();
                 if (icmpPacket != null)
                 {
-                    if (icmpPacket.TypeCode == IcmpV4TypeCode.EchoRequest)
+                    if (icmpPacket.TypeCode is  IcmpV4TypeCode.EchoRequest or IcmpV4TypeCode.EchoReply)
                     {
                         var s = new Socket(AddressFamily.InterNetwork,
                             SocketType.Raw, ProtocolType.Icmp);
@@ -466,6 +470,8 @@ namespace Native_Modem
                         s.SendTo(icmpPacket.Bytes, new IPEndPoint( ipPacket.DestinationAddress, 54321));
                         s.Close();
                     }
+
+                    
                 }
                 Console.WriteLine("Forward Success");
             }
@@ -532,6 +538,10 @@ namespace Native_Modem
                 if (Node == "2")
                 {
                     if (icmpPacket.TypeCode == IcmpV4TypeCode.EchoReply)
+                    {
+                        Modem.TransportData(1, packet.Bytes);
+                    }
+                    if (icmpPacket.TypeCode == IcmpV4TypeCode.EchoRequest)
                     {
                         Modem.TransportData(1, packet.Bytes);
                     }
@@ -604,7 +614,7 @@ namespace Native_Modem
                 OnPacketreceived,
                 info =>
                 {
-                    Console.Write($"\r{info}\n> ");
+                    //Console.Write($"\r{info}\n> ");
                 },
                 protocol.RecordTx ? Path.Combine(workFolder, "transportRecord.wav") : null,
                 protocol.RecordRx ? Path.Combine(workFolder, "receiverRecord.wav") : null);
