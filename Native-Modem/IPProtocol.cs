@@ -92,18 +92,17 @@ namespace Native_Modem
 
         static readonly Dictionary<Operation, string[]> Arguments = new(
     new KeyValuePair<Operation, string[]>[]
-    {
+            {
                 new(Operation.printsocket, new string[1] { "source address" }),
                 new(Operation.sendsocket, new string[1] { "destination address" }),
                 new(Operation.natsend, new string[2] { "file path","destination" }),
                 new(Operation.natrecv, new string[1] { "source address" }),
                 new(Operation.ping, new string[1] { "destination" }),
                 new(Operation.quit, Array.Empty<string>())
-    });
+            });
 
-        ~IpProtocal()
+        public void Dispose()
         {
-            Modem.Dispose();
             Device.Dispose();
             Device.Close();
         }
@@ -328,16 +327,21 @@ namespace Native_Modem
             var ethernet = new EthernetPacket(PhysicalAddress.Parse("112233445566"), PhysicalAddress.Parse("665544332211"), EthernetType.IPv4);
             //construct local IPV4 packet
             var ipv4 = new IPv4Packet(IPAddress.Parse(IP), IPAddress.Parse(destination));
-            //ethernet.PayloadPacket = ipv4;
+            ethernet.PayloadPacket = ipv4;
             const string cmdString = "Hello CS120";
             var sendBuffer = Encoding.ASCII.GetBytes(cmdString);
-            var icmp = new IcmpV4Packet(new ByteArraySegment(sendBuffer));
+            var headerBuffer = new byte[8];
+
+            var icmp = new IcmpV4Packet(new ByteArraySegment(headerBuffer), ipv4);
             icmp.TypeCode = icmpV4TypeCode;
             icmp.Sequence = 1;
-            icmp.UpdateCalculatedValues();
+            icmp.Id = 1;
+            icmp.PayloadData = sendBuffer;
             ipv4.PayloadPacket = icmp;
+            icmp.UpdateCalculatedValues();
+
             ipv4.UpdateCalculatedValues();
-            ethernet.PayloadPacket = ipv4;
+
             ethernet.UpdateCalculatedValues();
             return ethernet;
         }

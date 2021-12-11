@@ -16,9 +16,9 @@ namespace Native_Modem
         {
             //test();
             var dummy = new IpProtocal();
-
+            dummy.Dispose();
             // FullDuplexModem();
-            
+
         }
 
         enum Operation
