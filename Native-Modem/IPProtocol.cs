@@ -415,7 +415,7 @@ namespace Native_Modem
                         case IcmpV4TypeCode.EchoReply:
                             if (pingstat == pingstate.Waitforecho)
                             {
-                                Timer.Stop();
+                                Timer?.Stop();
                                 var timeslap = (DateTime.Now - dateTime).TotalMilliseconds;
                                 var buffer = Encoding.UTF8.GetString(icmpPacket.PayloadData);
                                 Console.WriteLine($"Source IP: {ipPacket.SourceAddress}, Payload: {buffer}, latency: {timeslap} ms ");
