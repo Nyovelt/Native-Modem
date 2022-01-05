@@ -349,7 +349,7 @@ namespace Native_Modem
             icmp.Checksum = 0;
             icmp.Sequence = 1;
             icmp.Id = 1;
-            icmp.PayloadData = sendBuffer;
+            icmp.PayloadData = new byte[]{0xff};
             byte[] bytes = icmp.Bytes;
             icmp.Checksum = (ushort)ChecksumUtils.OnesComplementSum(bytes, 0, bytes.Length);
             ipv4.UpdateCalculatedValues();
