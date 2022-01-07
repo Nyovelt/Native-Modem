@@ -15,10 +15,10 @@ namespace Native_Modem
         static void Main()
         {
             //test();
-            var dummy = new IpProtocal();
-            dummy.Dispose();
+            //var dummy = new IpProtocal();
+            //dummy.Dispose();
             // FullDuplexModem();
-
+            var naiveFtp = new NaiveFtp();
         }
 
         enum Operation

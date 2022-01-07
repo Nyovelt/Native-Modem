@@ -80,7 +80,12 @@ namespace Native_Modem
                 startFullDuplexModem();
             //for (var i = 0; i < 10; i++)
             //{ SendICMP("192.168.18.111"); System.Threading.Thread.Sleep(1000); }
-            Shell();
+            //Shell();
+
+        }
+
+        ~IpProtocal()
+        {
             Modem?.Dispose();
         }
 
@@ -349,7 +354,7 @@ namespace Native_Modem
             icmp.Checksum = 0;
             icmp.Sequence = 1;
             icmp.Id = 1;
-            icmp.PayloadData = new byte[]{0xff};
+            icmp.PayloadData = new byte[] { 0xff };
             byte[] bytes = icmp.Bytes;
             icmp.Checksum = (ushort)ChecksumUtils.OnesComplementSum(bytes, 0, bytes.Length);
             ipv4.UpdateCalculatedValues();
@@ -490,14 +495,14 @@ namespace Native_Modem
                 }
 
                 var icmpPacket = packet.Extract<IcmpV4Packet>();
-                if (icmpPacket is {TypeCode: IcmpV4TypeCode.EchoRequest or IcmpV4TypeCode.EchoReply})
+                if (icmpPacket is { TypeCode: IcmpV4TypeCode.EchoRequest or IcmpV4TypeCode.EchoReply })
                 {
                     Console.WriteLine(icmpPacket.ToString());
                     var s = new Socket(AddressFamily.InterNetwork,
                         SocketType.Raw, ProtocolType.Icmp);
                     var a = new Random().Next(20000, 65536);
                     var b = new Random().Next(20000, 65536);
-                    s.Bind(new IPEndPoint(IPAddress.Parse(IP),a
+                    s.Bind(new IPEndPoint(IPAddress.Parse(IP), a
                         ));
                     Debug.Assert(icmpPacket != null, nameof(icmpPacket) + " != null");
                     s.SendTo(icmpPacket.Bytes,
@@ -567,7 +572,7 @@ namespace Native_Modem
             var icmpPacket = packet.Extract<IcmpV4Packet>();
             if (icmpPacket != null)
             {
-                if (Node == "2" && ipPacket.DestinationAddress.ToString()  == IP)
+                if (Node == "2" && ipPacket.DestinationAddress.ToString() == IP)
                 {
                     if (icmpPacket.TypeCode == IcmpV4TypeCode.EchoReply)
                     {
