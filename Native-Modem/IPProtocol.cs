@@ -53,7 +53,7 @@ namespace Native_Modem
         public IpProtocal()
         {
 
-            GetInterface(); // 获得 ip 配置
+                GetInterface(); // 获得 ip 配置
 
             TcpBindPort = new HashSet<int>();
             savedData = new Queue<byte[]>();
@@ -97,16 +97,7 @@ namespace Native_Modem
             Node = Console.ReadLine();
 
 
-            Console.Write("Enter IP: ");
-            IP = Console.ReadLine();
 
-            var _devices = CaptureDeviceList.Instance;
-            foreach (var dev in _devices)
-                Console.WriteLine("{0}\n", dev.ToString());
-            Console.WriteLine("Choose the Ethernet Adapter");
-            var index = Int32.Parse(Console.ReadLine());
-            Device = LibPcapLiveDeviceList.Instance[index];
-            Console.WriteLine($"Choosing {Device.Name}");
 
 
         }
