@@ -32,7 +32,15 @@ namespace Native_Modem
             {
                 Initialize();
                 Shell();
+                _ipProtocal.Modem?.Dispose();
             }
+
+            var flag = true;
+            Console.CancelKeyPress += delegate (object sender, ConsoleCancelEventArgs e)
+            {
+                flag = false;
+            };
+            while(flag){}
         }
 
         ~NaiveFtp()
@@ -103,6 +111,8 @@ namespace Native_Modem
                 System.Text.Encoding.ASCII.GetString(receiveData, 0,
                     dataLength);
             Console.WriteLine(recvdMessage.ToString());
+
+            _ipProtocal.Modem.TransportData(1, Encoding.ASCII.GetBytes(recvdMessage));
             _recOffset += dataLength;
         }
 
@@ -163,7 +173,7 @@ namespace Native_Modem
 
         private void Send(string message)
         {
-            
+
             Flush();
             Console.WriteLine($"Sending {message}");
             var data = System.Text.Encoding.ASCII.GetBytes(message);
