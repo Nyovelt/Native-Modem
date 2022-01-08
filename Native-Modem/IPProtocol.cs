@@ -421,11 +421,11 @@ namespace Native_Modem
                 if (tcpPacket != null)
                 {
                     var server = new Socket(AddressFamily.InterNetwork,
-                        SocketType.Dgram, ProtocolType.Tcp);
+                        SocketType.Stream, ProtocolType.Tcp);
                     server.Bind(new IPEndPoint(IPAddress.Parse(IP), tcpPacket.SourcePort));
                     TcpBindPort.Add(tcpPacket.SourcePort);
                     var endpoint =
-                        new IPEndPoint(IPAddress.Parse("127.0.0.1"), 21);
+                        new IPEndPoint(IPAddress.Parse("192.168.196.59"), 23);
                     server.SendTo(tcpPacket.PayloadData, endpoint);
                     server.Close();
                 }
