@@ -206,7 +206,7 @@ namespace Native_Modem
                 Console.WriteLine("Sent: {0}", System.Text.Encoding.ASCII.GetString(savedData, 0, savedData.Length));
             }
             _ipProtocal.flag2 = false;
-            
+
         }
 
         private void Send(string message)
@@ -249,7 +249,11 @@ namespace Native_Modem
                     int.Parse(ret.Split(',')[5]));
                 _pasvport = int.Parse(ret.Split(',')[4]) * 256 +
                             int.Parse(ret.Split(',')[5]);
-                Parallel.Invoke(()=>pasvTunnel(_pasvport));
+                if (_ipProtocal.Node == "1")
+                {
+                    Thread t = new Thread(()=> pasvTunnel(_pasvport));
+                    t.Start();
+                }
 
             }
 
@@ -529,7 +533,7 @@ namespace Native_Modem
                     System.Text.Encoding.ASCII.GetString(receiveData, 0,
                         dataLength);
                 Console.WriteLine(recvdMessage.ToString());
-                 temp = new byte[dataLength + 1];
+                temp = new byte[dataLength + 1];
                 Array.Copy(receiveData, 0, temp, 1, dataLength);
                 temp[0] = 0xfe;
                 if (_ipProtocal.Node == "2")
