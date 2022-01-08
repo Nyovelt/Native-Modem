@@ -590,7 +590,8 @@ namespace Native_Modem
                     Thread.Sleep(1000);
             }
             _pasvport = -1;
-            Thread.Sleep(1000);
+            if (_ipProtocal.Node == "1")
+                Thread.Sleep(3000);
             Flush();
         }
 
