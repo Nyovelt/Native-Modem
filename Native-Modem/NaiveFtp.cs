@@ -298,6 +298,7 @@ namespace Native_Modem
             STOR, //请求上传
             SYST,
             FEAT,
+            TYPE,
             quit
         }
 
@@ -312,6 +313,7 @@ namespace Native_Modem
                 new(Operation.PASV, Array.Empty<string>()),
                 new(Operation.LIST, Array.Empty<string>()),
                 new(Operation.RETR, new string[1] {"Path"}),
+                new(Operation.TYPE, new string[1] {"ASCII"}),
                 new(Operation.STOR, new string[1] {"Upload"}),
                 new(Operation.SYST, Array.Empty<string>()),
                 new(Operation.FEAT, Array.Empty<string>()),
@@ -380,6 +382,15 @@ namespace Native_Modem
                         }
 
                         Send($"CWD {args[1]}\r\n");
+                        break;
+                    case Operation.TYPE:
+                        if (args[1] == null)
+                        {
+                            Console.WriteLine("Invalid arguments");
+                            break;
+                        }
+
+                        Send($"TYPE {args[1]}\r\n");
                         break;
                     case Operation.PASV:
                         Send("PASV\r\n");
@@ -458,6 +469,15 @@ namespace Native_Modem
                     }
 
                     Send($"CWD {args[1]}\r\n");
+                    break;
+                case Operation.TYPE:
+                    if (args[1] == null)
+                    {
+                        Console.WriteLine("Invalid arguments");
+                        break;
+                    }
+
+                    Send($"TYPE {args[1]}\r\n");
                     break;
                 case Operation.SYST:
                     Send($"SYST\r\n");
