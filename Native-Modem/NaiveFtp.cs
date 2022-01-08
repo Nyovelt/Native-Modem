@@ -155,12 +155,12 @@ namespace Native_Modem
                     // Translate data bytes to a ASCII string.
                     data = System.Text.Encoding.ASCII.GetString(bytes, 0, i);
                     Console.WriteLine("Received: {0}", data);
+                    _ipProtocal.Modem.TransportData(2, bytes);
+
 
                     // Process the data sent by the client.
                     while (_ipProtocal.savedData.TryDequeue(out var savedData))
                     {
-
-
                         // Send back a response.
                         stream.Write(savedData, 0, savedData.Length);
                         Console.WriteLine("Sent: {0}", System.Text.Encoding.ASCII.GetString(savedData, 0, savedData.Length));
@@ -288,7 +288,8 @@ namespace Native_Modem
                             Console.WriteLine("Invalid arguments");
                             break;
                         }
-                        _ipProtocal.Modem.TransportData(2, Encoding.ASCII.GetBytes($"USER {args[1]}"));
+
+                        Send($"USER {args[1]}\r\n");
                         break;
                     case Operation.PASS:
                         if (args[1] == null)
@@ -296,7 +297,8 @@ namespace Native_Modem
                             Console.WriteLine("Invalid arguments");
                             break;
                         }
-                        _ipProtocal.Modem.TransportData(2, Encoding.ASCII.GetBytes($"PASS {args[1]}"));
+
+                        Send($"PASS {args[1]}\r\n");
                         break;
                     case Operation.PWD:
                         if (args[1] == null)
@@ -304,7 +306,8 @@ namespace Native_Modem
                             Console.WriteLine("Invalid arguments");
                             break;
                         }
-                        _ipProtocal.Modem.TransportData(2, Encoding.ASCII.GetBytes($"PWD {args[1]}"));
+
+                        Send($"PWD {args[1]}\r\n");
                         break;
                     case Operation.CWD:
                         if (args[1] == null)
@@ -312,13 +315,14 @@ namespace Native_Modem
                             Console.WriteLine("Invalid arguments");
                             break;
                         }
-                        _ipProtocal.Modem.TransportData(2, Encoding.ASCII.GetBytes($"CWD {args[1]}"));
+
+                        Send($"CWD {args[1]}\r\n");
                         break;
                     case Operation.PASV:
-                        _ipProtocal.Modem.TransportData(2, Encoding.ASCII.GetBytes("PASV\r\n"));
+                        Send("PASV\r\n");
                         break;
                     case Operation.LIST:
-                        _ipProtocal.Modem.TransportData(2, Encoding.ASCII.GetBytes("LIST"));
+                        CommandLIST();
                         break;
                     case Operation.RETR:
                         if (args[1] == null)
@@ -326,7 +330,7 @@ namespace Native_Modem
                             Console.WriteLine("Invalid arguments");
                             break;
                         }
-                        _ipProtocal.Modem.TransportData(2, Encoding.ASCII.GetBytes($"RETR {args[1]}"));
+                        CommandRETR(args[1]);
                         break;
                     default:
                         Console.WriteLine("Unknown Command");
