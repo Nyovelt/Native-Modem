@@ -1,8 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using FluentFTP;
 
@@ -15,6 +17,7 @@ namespace Native_Modem
         private FtpClient _ftpClient;
         private TcpClient _tcpClient;
         private NetworkStream _stream;
+        private TcpListener _tcpListener;
         private int _sendOffset;
         private int _recOffset;
         private const string Hostname = "127.0.0.1";
@@ -29,11 +32,25 @@ namespace Native_Modem
             Shell();
         }
 
+        ~NaiveFtp()
+        {
+            _tcpListener.Stop();
+        }
+
+
+
         private void Initialize()
         {
+            // Start TCP Listener
+            var port = 19000;
+            IPAddress localAddr = IPAddress.Parse("127.0.0.1");
+            _tcpListener = new TcpListener(localAddr, port);
+            _tcpListener.Start();
+            var t = new Thread(AthernetTunnel);
+            t.Start();
             try
             {
-                _tcpClient = new TcpClient(Hostname, 21);
+                _tcpClient = new TcpClient(Hostname, 19000);
 
             }
             catch (SocketException ex)
@@ -57,8 +74,53 @@ namespace Native_Modem
             _recOffset += dataLength;
         }
 
+
+        private void AthernetTunnel()
+        {
+            Console.WriteLine("AthernetTunnel Start \n");
+
+            // Buffer for reading data
+            Byte[] bytes = new Byte[256];
+            String data = null;
+
+            while (true)
+            {
+                Console.Write("Waiting for a connection... ");
+
+                // Perform a blocking call to accept requests.
+                // You could also use server.AcceptSocket() here.
+                TcpClient client = _tcpListener.AcceptTcpClient();
+                Console.WriteLine("Connected!");
+
+                data = null;
+
+                // Get a stream object for reading and writing
+                NetworkStream stream = client.GetStream();
+
+                int i;
+
+                // Loop to receive all the data sent by the client.
+                while ((i = stream.Read(bytes, 0, bytes.Length)) != 0)
+                {
+                    // Translate data bytes to a ASCII string.
+                    data = System.Text.Encoding.ASCII.GetString(bytes, 0, i);
+                    Console.WriteLine("Received: {0}", data);
+
+                    // Process the data sent by the client.
+                    data = data.ToUpper();
+
+                    byte[] msg = System.Text.Encoding.ASCII.GetBytes(data);
+
+                    // Send back a response.
+                    stream.Write(msg, 0, msg.Length);
+                    Console.WriteLine("Sent: {0}", data);
+                }
+            }
+        }
+
         private void Send(string message)
         {
+            Flush();
             Console.WriteLine($"Sending {message}");
             var data = System.Text.Encoding.ASCII.GetBytes(message);
             _stream.Write(data, 0, data.Length);
@@ -81,10 +143,10 @@ namespace Native_Modem
 
 
 
-            if (message == "PASV\r\n")
+            if (message == "PASV\r\n" && ret.Split(' ')[0] == "227")
             {
                 ret = (ret.Split(' ')[4]).Replace("\r", "").Replace("\n", "")
-                    .Replace("(", "").Replace(")", "");
+                    .Replace("(", "").Replace(")", "").Replace(".","");
                 Console.WriteLine("PASV port changed to {0}",
                     int.Parse(ret.Split(',')[4]) * 256 +
                     int.Parse(ret.Split(',')[5]));
@@ -222,6 +284,7 @@ namespace Native_Modem
 
         public void CommandLIST()
         {
+            Flush();
             if (_pasvport == -1)
             {
                 Console.WriteLine("need PASV");
@@ -274,22 +337,24 @@ namespace Native_Modem
 
 
             // wait for a response
-            while (!getStream.DataAvailable)
+            while (getStream.DataAvailable)
             {
+                receiveData = new byte[256];
+                dataLength = getStream.Read(receiveData, 0, receiveData.Length);
+                recvdMessage =
+                    System.Text.Encoding.ASCII.GetString(receiveData, 0,
+                        dataLength);
+                Console.WriteLine(recvdMessage.ToString());
             }
 
-            receiveData = new byte[256];
-            dataLength = getStream.Read(receiveData, 0, receiveData.Length);
-            recvdMessage =
-                System.Text.Encoding.ASCII.GetString(receiveData, 0,
-                    dataLength);
-            Console.WriteLine(recvdMessage.ToString());
+
             Flush();
         }
 
 
         public void CommandRETR(string path)
         {
+            Flush();
             if (_pasvport == -1)
             {
                 Console.WriteLine("need PASV");
@@ -337,16 +402,17 @@ namespace Native_Modem
 
             
             // wait for a response
-            while (!getStream.DataAvailable)
+            while (getStream.DataAvailable)
             {
+                receiveData = new byte[256];
+                dataLength = getStream.Read(receiveData, 0, receiveData.Length);
+                recvdMessage =
+                    System.Text.Encoding.ASCII.GetString(receiveData, 0,
+                        dataLength);
+                Console.WriteLine(recvdMessage.ToString());
             }
 
-            receiveData = new byte[256];
-            dataLength = getStream.Read(receiveData, 0, receiveData.Length);
-            recvdMessage =
-                System.Text.Encoding.ASCII.GetString(receiveData, 0,
-                    dataLength);
-            Console.WriteLine(recvdMessage.ToString());
+
             Flush();
         }
 

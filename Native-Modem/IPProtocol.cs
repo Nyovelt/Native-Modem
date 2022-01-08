@@ -7,6 +7,7 @@ using PacketDotNet;
 using SharpPcap;
 using SharpPcap.LibPcap;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -47,30 +48,13 @@ namespace Native_Modem
         private pingstate pingstat;
         public Timer Timer;
         private DateTime dateTime;
+        public ArrayList TcpBindPort;
         public IpProtocal()
         {
 
             GetInterface(); // 获得 ip 配置
 
-            //var s = new Socket(AddressFamily.InterNetwork,
-            //    SocketType.Raw, ProtocolType.Icmp);
-            //s.Bind(new IPEndPoint(IPAddress.Parse(IP), 12345));
-
-            //const string cmdString = "Hello CS120";
-            //var sendBuffer = Encoding.ASCII.GetBytes(cmdString);
-            //var headerBuffer = new byte[8];
-            //var icmp = new IcmpV4Packet(new ByteArraySegment(headerBuffer));
-            //icmp.TypeCode = IcmpV4TypeCode.EchoRequest;
-            //icmp.Sequence = 1;
-            //icmp.Id = 1;
-            //icmp.PayloadData = sendBuffer;
-            //icmp.Checksum = 0;
-            //byte[] bytes = icmp.Bytes;
-            //icmp.Checksum = (ushort)ChecksumUtils.OnesComplementSum(bytes, 0, bytes.Length);
-
-            //s.SendTo(icmp.Bytes, new IPEndPoint(IPAddress.Parse("47.100.248.23"), 54321));
-            //s.Close();
-            //return;
+            TcpBindPort = new ArrayList();
 
             Device?.Open();
             if (Device != null)
@@ -78,9 +62,7 @@ namespace Native_Modem
             Device?.StartCapture();
             if (Node is "1" or "2")
                 startFullDuplexModem();
-            //for (var i = 0; i < 10; i++)
-            //{ SendICMP("192.168.18.111"); System.Threading.Thread.Sleep(1000); }
-            //Shell();
+
 
         }
 
@@ -579,6 +561,18 @@ namespace Native_Modem
                         Modem.TransportData(1, packet.Bytes);
                     }
                     if (icmpPacket.TypeCode == IcmpV4TypeCode.EchoRequest)
+                    {
+                        Modem.TransportData(1, packet.Bytes);
+                    }
+                }
+            }
+
+            var tcpPacket = packet.Extract<TcpPacket>();
+            if (tcpPacket != null)
+            {
+                if (Node == "2" && ipPacket.DestinationAddress.ToString() == IP )
+                {
+                    if (tcpPacket.DestinationPort == 11451)
                     {
                         Modem.TransportData(1, packet.Bytes);
                     }
