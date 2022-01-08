@@ -292,6 +292,7 @@ namespace Native_Modem
             LIST, //查看服务器文件（从数据端口返回结果）
             RETR, //请求下载
             STOR, //请求上传
+            SYST,
             quit
         }
 
@@ -307,6 +308,7 @@ namespace Native_Modem
                 new(Operation.LIST, Array.Empty<string>()),
                 new(Operation.RETR, new string[1] {"Path"}),
                 new(Operation.STOR, new string[1] {"Upload"}),
+                new(Operation.SYST, Array.Empty<string>()),
                 new(Operation.quit, Array.Empty<string>())
             });
 
@@ -361,6 +363,9 @@ namespace Native_Modem
                         }
 
                         Send($"PWD {args[1]}\r\n");
+                        break;
+                    case Operation.SYST:
+                        Send($"SYST {args[1]}\r\n");
                         break;
                     case Operation.CWD:
                         if (args[1] == null)
@@ -453,6 +458,9 @@ namespace Native_Modem
                     }
 
                     Send($"CWD {args[1]}\r\n");
+                    break;
+                case Operation.SYST:
+                    Send($"SYST {args[1]}\r\n");
                     break;
                 case Operation.PASV:
                     Send("PASV\r\n");
@@ -565,7 +573,7 @@ namespace Native_Modem
             TcpClient client = null;
             try
             {
-                client = new TcpClient(Hostname, _pasvport);
+                client = new TcpClient(_ipProtocal.IP, _pasvport);
             }
             catch (SocketException ex)
             {
@@ -598,9 +606,15 @@ namespace Native_Modem
                 System.Text.Encoding.ASCII.GetString(receiveData, 0,
                     dataLength);
             Console.WriteLine(recvdMessage.ToString());
+           
+            var temp = new byte[dataLength + 1];
+            Array.Copy(receiveData, 0, temp, 1, dataLength);
+            temp[0] = 0xfe;
+            if (_ipProtocal.Node == "2")
+                _ipProtocal.Modem.TransportData(1, temp);
             _recOffset += dataLength;
-
-
+            Thread.Sleep(3000);
+       
             // wait for a response
             while (getStream.DataAvailable)
             {
@@ -610,6 +624,12 @@ namespace Native_Modem
                     System.Text.Encoding.ASCII.GetString(receiveData, 0,
                         dataLength);
                 Console.WriteLine(recvdMessage.ToString());
+                temp = new byte[dataLength + 1];
+                Array.Copy(receiveData, 0, temp, 1, dataLength);
+                temp[0] = 0xfe;
+                if (_ipProtocal.Node == "2")
+                    _ipProtocal.Modem.TransportData(1, temp);
+                Thread.Sleep(3000);
             }
 
 
