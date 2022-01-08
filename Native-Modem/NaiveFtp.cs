@@ -297,6 +297,7 @@ namespace Native_Modem
             RETR, //请求下载
             STOR, //请求上传
             SYST,
+            FEAT,
             quit
         }
 
@@ -313,6 +314,7 @@ namespace Native_Modem
                 new(Operation.RETR, new string[1] {"Path"}),
                 new(Operation.STOR, new string[1] {"Upload"}),
                 new(Operation.SYST, Array.Empty<string>()),
+                new(Operation.FEAT, Array.Empty<string>()),
                 new(Operation.quit, Array.Empty<string>())
             });
 
@@ -371,6 +373,9 @@ namespace Native_Modem
                     case Operation.SYST:
                         Send($"SYST\r\n");
                         break;
+                    case Operation.FEAT:
+                        Send($"FEAT\r\n");
+                        break;
                     case Operation.CWD:
                         if (args[1] == null)
                         {
@@ -396,7 +401,6 @@ namespace Native_Modem
                         break;
                     default:
                         Console.WriteLine("Unknown Command");
-                        Send($"{args[0]}\r\n");
                         break;
                 }
             }
@@ -467,6 +471,9 @@ namespace Native_Modem
                 case Operation.SYST:
                     Send($"SYST\r\n");
                     break;
+                case Operation.FEAT:
+                    Send($"FEAT\r\n");
+                    break;
                 case Operation.PASV:
                     Send("PASV\r\n");
                     break;
@@ -483,7 +490,6 @@ namespace Native_Modem
                     break;
                 default:
                     Console.WriteLine("Unknown Command");
-                    Send($"{args[0]}\r\n");
                     break;
             }
 
