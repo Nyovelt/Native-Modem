@@ -27,11 +27,9 @@ namespace Native_Modem
         {
             _ipProtocal = new IpProtocal();
             //ftpClient = new FtpClient("127.0.0.1", 9000, "ftptest", "ftptest");
-            if (_ipProtocal.Node == "1")
-            {
-                Initialize();
-                Shell();
-            }
+
+            Initialize();
+            Shell();
         }
 
         ~NaiveFtp()
@@ -108,18 +106,18 @@ namespace Native_Modem
                     // Translate data bytes to a ASCII string.
                     data = System.Text.Encoding.ASCII.GetString(bytes, 0, i);
                     Console.WriteLine("Received: {0}", data);
-
+                    
                     // Process the data sent by the client.
-                    while (_ipProtocal.savedData.TryDequeue(out var savedData))
+                    while(_ipProtocal.savedData.TryDequeue(out var savedData))
                     {
-
+                          
 
                         // Send back a response.
                         stream.Write(savedData, 0, savedData.Length);
                         Console.WriteLine("Sent: {0}", System.Text.Encoding.ASCII.GetString(savedData, 0, savedData.Length));
                     }
 
-
+                
                 }
             }
         }
@@ -152,7 +150,7 @@ namespace Native_Modem
             if (message == "PASV\r\n" && ret.Split(' ')[0] == "227")
             {
                 ret = (ret.Split(' ')[4]).Replace("\r", "").Replace("\n", "")
-                    .Replace("(", "").Replace(")", "").Replace(".", "");
+                    .Replace("(", "").Replace(")", "").Replace(".","");
                 Console.WriteLine("PASV port changed to {0}",
                     int.Parse(ret.Split(',')[4]) * 256 +
                     int.Parse(ret.Split(',')[5]));
@@ -406,7 +404,7 @@ namespace Native_Modem
             Console.WriteLine(recvdMessage.ToString());
             _recOffset += dataLength;
 
-
+            
             // wait for a response
             while (getStream.DataAvailable)
             {
