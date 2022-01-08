@@ -96,6 +96,9 @@ namespace Native_Modem
             Console.Write("Enter Node: ");
             Node = Console.ReadLine();
 
+            if (Node != "1") return;
+            Console.Write("Enter IP: ");
+            IP = Console.ReadLine();
 
 
 
