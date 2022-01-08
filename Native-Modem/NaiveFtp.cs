@@ -134,9 +134,9 @@ namespace Native_Modem
                 data = null;
 
                 // Get a stream object for reading and writing
-                Console.WriteLine("1");
+               
                 NetworkStream stream = client.GetStream();
-                Console.WriteLine("2");
+   
 
                 while (_ipProtocal.flag == false) { }
 
@@ -146,9 +146,9 @@ namespace Native_Modem
                     stream.Write(savedData, 0, savedData.Length);
                     Console.WriteLine("Sent: {0}", System.Text.Encoding.ASCII.GetString(savedData, 0, savedData.Length));
                 }
-                _ipProtocal.flag = true;
+                _ipProtocal.flag = false;
                 int i;
-
+                
                 // Loop to receive all the data sent by the client.
                 while (true)
                 {
@@ -157,7 +157,7 @@ namespace Native_Modem
                     data = System.Text.Encoding.ASCII.GetString(bytes, 0, i);
                     Console.WriteLine("Received: {0}", data);
                     _ipProtocal.Modem.TransportData(2, bytes);
-
+                    while (_ipProtocal.flag == false) { }
 
                     // Process the data sent by the client.
                     while (_ipProtocal.savedData.TryDequeue(out var savedData))
@@ -166,7 +166,7 @@ namespace Native_Modem
                         stream.Write(savedData, 0, savedData.Length);
                         Console.WriteLine("Sent: {0}", System.Text.Encoding.ASCII.GetString(savedData, 0, savedData.Length));
                     }
-
+                    _ipProtocal.flag = false;
 
                 }
             }
