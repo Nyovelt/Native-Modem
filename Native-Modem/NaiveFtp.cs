@@ -58,6 +58,7 @@ namespace Native_Modem
             _tcpListener.Start();
             var t = new Thread(AthernetTunnel);
             t.Start();
+            //return;
             try
             {
                 if (_ipProtocal.Node == "1")
