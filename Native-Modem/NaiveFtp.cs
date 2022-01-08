@@ -20,7 +20,7 @@ namespace Native_Modem
         private TcpListener _tcpListener;
         private int _sendOffset;
         private int _recOffset;
-        private const string Hostname = "127.0.0.1";
+        private const string Hostname = "10.11.135.168";
         private int _pasvport = -1;
 
         public NaiveFtp()

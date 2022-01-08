@@ -425,7 +425,7 @@ namespace Native_Modem
                     server.Bind(new IPEndPoint(IPAddress.Parse(IP), tcpPacket.SourcePort));
                     TcpBindPort.Add(tcpPacket.SourcePort);
                     var endpoint =
-                        new IPEndPoint(IPAddress.Parse("127.0.0.1"), 21);
+                        new IPEndPoint(ipPacket.DestinationAddress, tcpPacket.DestinationPort);
                     server.SendTo(tcpPacket.PayloadData, endpoint);
                     server.Close();
                 }
