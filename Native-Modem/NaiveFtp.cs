@@ -369,7 +369,7 @@ namespace Native_Modem
                         Send($"PWD {args[1]}\r\n");
                         break;
                     case Operation.SYST:
-                        Send($"SYST {args[1]}\r\n");
+                        Send($"SYST\r\n");
                         break;
                     case Operation.CWD:
                         if (args[1] == null)
@@ -464,7 +464,7 @@ namespace Native_Modem
                     Send($"CWD {args[1]}\r\n");
                     break;
                 case Operation.SYST:
-                    Send($"SYST {args[1]}\r\n");
+                    Send($"SYST\r\n");
                     break;
                 case Operation.PASV:
                     Send("PASV\r\n");
