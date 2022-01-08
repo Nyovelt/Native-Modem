@@ -382,18 +382,7 @@ namespace Native_Modem
                     return;
                 }
 
-                var udpPacket = packet.Extract<UdpPacket>();
-                if (udpPacket != null)
-                {
-                    if (Natrecv)
-                    {
-                        var result = Encoding.UTF8.GetString(udpPacket.PayloadData);
-                        Console.WriteLine(
-                            $"SourceIP: {ipPacket.SourceAddress}, DestinationIP: {ipPacket.DestinationAddress}, SourcePort: {udpPacket.SourcePort}, DestinationPort: {udpPacket.DestinationPort}, PayloadData: {result}");
-                        Console.WriteLine("Natrecv OK\n");
-                        Natrecv = false;
-                    }
-                }
+
 
                 var tcpPacket = packet.Extract<TcpPacket>();
                 if (tcpPacket != null)
@@ -401,55 +390,7 @@ namespace Native_Modem
                     savedData.Enqueue(tcpPacket.PayloadData);
                 }
 
-                var icmpPacket = packet.Extract<IcmpV4Packet>();
-                if (icmpPacket != null)
-                {
-                    switch (icmpPacket.TypeCode)
-                    {
-                        case IcmpV4TypeCode.EchoReply:
-                            if (pingstat == pingstate.Waitforecho)
-                            {
-                                Timer?.Stop();
-                                var timeslap = (DateTime.Now - dateTime).TotalMilliseconds;
-                                var buffer = Encoding.UTF8.GetString(icmpPacket.PayloadData);
-                                Console.WriteLine($"Source IP: {ipPacket.SourceAddress}, Payload: {buffer}, latency: {timeslap} ms ");
-                                pingstat = pingstate.Idle;
-                            }
-                            break;
-                        case IcmpV4TypeCode.EchoRequest:
-                            var echoreply = ConstructICMP(
-                                ipPacket.SourceAddress.ToString(),
-                                IcmpV4TypeCode.EchoReply);
-
-
-                            //construct ethernet packet
-                            var ethernet = new EthernetPacket(PhysicalAddress.Parse("112233445566"), PhysicalAddress.Parse("665544332211"), EthernetType.IPv4);
-                            //construct local IPV4 packet
-                            var ipv4 = new IPv4Packet(IPAddress.Parse(IP), ipPacket.SourceAddress);
-                            ethernet.PayloadPacket = ipv4;
-                            //const string cmdString = "Hello CS120";
-                            //var sendBuffer = Encoding.ASCII.GetBytes(cmdString);
-                            var headerBuffer = new byte[8];
-
-                            var icmp = new IcmpV4Packet(new ByteArraySegment(headerBuffer));
-                            ipv4.PayloadPacket = icmp;
-                            icmp.TypeCode = IcmpV4TypeCode.EchoReply;
-                            icmp.Checksum = 0;
-                            icmp.Sequence = icmpPacket.Sequence;
-                            icmp.Id = icmpPacket.Id;
-                            icmp.PayloadData = icmpPacket.PayloadData;
-                            byte[] bytes = icmp.Bytes;
-                            icmp.Checksum = (ushort)ChecksumUtils.OnesComplementSum(bytes, 0, bytes.Length);
-                            ipv4.UpdateCalculatedValues();
-                            ethernet.UpdateCalculatedValues();
-
-
-                            Console.WriteLine($"Echo Reply to IP: {ipPacket.SourceAddress}");
-                            Modem.TransportData(2, ethernet.Bytes);
-                            break;
-                    }
-                }
-
+               
 
 
 
@@ -474,35 +415,7 @@ namespace Native_Modem
                     return;
                 }
 
-                var udpPacket = packet.Extract<UdpPacket>(); // Try if it is UDP
-                if (udpPacket != null)
-                {
-                    // begin to send to Node 3 
-                    var server = new Socket(AddressFamily.InterNetwork,
-                        SocketType.Dgram, ProtocolType.Udp);
-                    server.Bind(new IPEndPoint(IPAddress.Parse(IP), 12345));
-                    var endpoint =
-                        new IPEndPoint(ipPacket.DestinationAddress, 54321);
-                    server.SendTo(udpPacket.PayloadData, endpoint);
-                    server.Close();
-                }
 
-                var icmpPacket = packet.Extract<IcmpV4Packet>();
-                if (icmpPacket is { TypeCode: IcmpV4TypeCode.EchoRequest or IcmpV4TypeCode.EchoReply })
-                {
-                    Console.WriteLine(icmpPacket.ToString());
-                    var s = new Socket(AddressFamily.InterNetwork,
-                        SocketType.Raw, ProtocolType.Icmp);
-                    var a = new Random().Next(20000, 65536);
-                    var b = new Random().Next(20000, 65536);
-                    s.Bind(new IPEndPoint(IPAddress.Parse(IP), a
-                        ));
-                    Debug.Assert(icmpPacket != null, nameof(icmpPacket) + " != null");
-                    s.SendTo(icmpPacket.Bytes,
-                        new IPEndPoint(ipPacket.DestinationAddress,
-                            b));
-                    s.Close();
-                }
 
                 var tcpPacket = packet.Extract<TcpPacket>();
                 if (tcpPacket != null)
@@ -544,52 +457,7 @@ namespace Native_Modem
             var ipPacket = packet.Extract<IPPacket>();
 
             if (ipPacket == null) { return; }
-            var udpPacket = packet.Extract<UdpPacket>();
-            if (udpPacket != null)
-            {
-                if (Printsocketison && ipPacket.SourceAddress.ToString() == PrintsocketisonArg && ipPacket.DestinationAddress.ToString() == IP)
-                {
-                    var joinedBytes = string.Join(", ", udpPacket.PayloadData.Select(b => b.ToString()));
-                    Console.WriteLine(
-                        $"SourceIP: {ipPacket.SourceAddress}, DestinationIP: {ipPacket.DestinationAddress}, SourcePort: {udpPacket.SourcePort}, DestinationPort: {udpPacket.DestinationPort}, Payload: {joinedBytes}");
-                }
-
-                if (Node == "2" && ipPacket.DestinationAddress.ToString() == IP && udpPacket.DestinationPort == 54321)
-                {
-                    var ethernet = packet.Extract<EthernetPacket>();
-                    if (ethernet != null)
-                    {
-                        Console.WriteLine("Forward to Node 1");
-                        Modem.TransportData(1, ethernet.Bytes);
-                    }
-
-
-                }
-
-                if (Node == "3" && Natrecv && ipPacket.SourceAddress.ToString() == NatrecvArg && ipPacket.DestinationAddress.ToString() == IP)
-                {
-                    var result = System.Text.Encoding.UTF8.GetString(udpPacket.PayloadData);
-                    Console.WriteLine(
-                        $"SourceIP: {ipPacket.SourceAddress}, DestinationIP: {ipPacket.DestinationAddress}, SourcePort: {udpPacket.SourcePort}, DestinationPort: {udpPacket.DestinationPort}, PayloadData: {result}");
-                    Console.WriteLine("Natrecv OK\n");
-
-                }
-            }
-            var icmpPacket = packet.Extract<IcmpV4Packet>();
-            if (icmpPacket != null)
-            {
-                if (Node == "2" && ipPacket.DestinationAddress.ToString() == IP)
-                {
-                    if (icmpPacket.TypeCode == IcmpV4TypeCode.EchoReply)
-                    {
-                        Modem.TransportData(1, packet.Bytes);
-                    }
-                    if (icmpPacket.TypeCode == IcmpV4TypeCode.EchoRequest)
-                    {
-                        Modem.TransportData(1, packet.Bytes);
-                    }
-                }
-            }
+            
 
             var tcpPacket = packet.Extract<TcpPacket>();
             if (tcpPacket != null)
