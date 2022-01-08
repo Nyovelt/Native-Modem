@@ -156,7 +156,9 @@ namespace Native_Modem
                     // Translate data bytes to a ASCII string.
                     data = System.Text.Encoding.ASCII.GetString(bytes, 0, i);
                     Console.WriteLine("Received: {0}", data);
-                    _ipProtocal.Modem.TransportData(2, bytes);
+                    byte[] temp = new byte[i];
+                    Array.Copy(bytes, temp, i);
+                    _ipProtocal.Modem.TransportData(2, temp);
                     while (_ipProtocal.flag == false) { }
 
                     // Process the data sent by the client.
@@ -348,7 +350,7 @@ namespace Native_Modem
         public void Parse(string cli)
         {
 
-            var args = cli?.Split(' ');
+            var args = cli?.Replace("\r","").Replace("\n", "").Split(' ');
             if (args is { Length: 0 })
                 return;
             if (!Enum.TryParse(args[0], true, out Operation op))
