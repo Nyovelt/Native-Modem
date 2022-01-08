@@ -50,11 +50,12 @@ namespace Native_Modem
         public HashSet<int> TcpBindPort;
         public Queue<byte[]> savedData;
         public NaiveFtp naiveFtp;
+        public bool flag;
         public IpProtocal()
         {
 
                 GetInterface(); // 获得 ip 配置
-
+            flag = false;
             TcpBindPort = new HashSet<int>();
             savedData = new Queue<byte[]>();
             if (Node is "1" or "2")
@@ -82,6 +83,7 @@ namespace Native_Modem
             if (Node == "1")
             {
                 savedData.Enqueue(data);
+                flag = true;
             }
 
             if (Node == "2")

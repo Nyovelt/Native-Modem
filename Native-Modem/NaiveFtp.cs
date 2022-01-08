@@ -40,7 +40,7 @@ namespace Native_Modem
             {
                 flag = false;
             };
-            while(flag){}
+            while (flag) { }
         }
 
         ~NaiveFtp()
@@ -138,14 +138,19 @@ namespace Native_Modem
                 data = null;
 
                 // Get a stream object for reading and writing
+                Console.WriteLine("1");
                 NetworkStream stream = client.GetStream();
+                Console.WriteLine("2");
+
+                while (_ipProtocal.flag == false) { }
+
                 while (_ipProtocal.savedData.TryDequeue(out var savedData))
                 {
                     // Send back a response.
                     stream.Write(savedData, 0, savedData.Length);
                     Console.WriteLine("Sent: {0}", System.Text.Encoding.ASCII.GetString(savedData, 0, savedData.Length));
                 }
-
+                _ipProtocal.flag = true;
                 int i;
 
                 // Loop to receive all the data sent by the client.
