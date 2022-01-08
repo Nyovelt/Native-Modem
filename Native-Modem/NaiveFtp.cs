@@ -209,7 +209,8 @@ namespace Native_Modem
                 // Send back a response.
                 stream.Write(savedData, 0, savedData.Length);
                 Console.WriteLine("Sent: {0}", System.Text.Encoding.ASCII.GetString(savedData, 0, savedData.Length));
-                Thread.Sleep(2000);
+                if (_ipProtocal.savedData2.Count == 0)
+                    Thread.Sleep(800);
             }
             _ipProtocal.flag2 = false;
 
@@ -552,8 +553,9 @@ namespace Native_Modem
 
             var receiveData = new byte[256];
             //Send("LIST\r\n");
-            Parallel.Invoke(() => Send(cli));
-
+            Send(cli);
+            //var t = new Thread(AthernetTunnel);
+            //t.Start();
             // wait for a response
             var dataLength =
                 getStream.Read(receiveData, _recOffset, receiveData.Length);
@@ -568,7 +570,7 @@ namespace Native_Modem
                 _ipProtocal.Modem.TransportData(1, temp);
             _recOffset += dataLength;
             if (_ipProtocal.Node == "1")
-                Thread.Sleep(3000);
+                Thread.Sleep(1000);
 
 
             // wait for a response
@@ -586,10 +588,10 @@ namespace Native_Modem
                 if (_ipProtocal.Node == "2")
                     _ipProtocal.Modem.TransportData(1, temp);
                 if (_ipProtocal.Node == "1")
-                    Thread.Sleep(3000);
+                    Thread.Sleep(1000);
             }
             _pasvport = -1;
-
+            Thread.Sleep(1000);
             Flush();
         }
 
