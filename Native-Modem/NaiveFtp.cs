@@ -299,6 +299,7 @@ namespace Native_Modem
             SYST,
             FEAT,
             TYPE,
+            MLSD,
             quit
         }
 
@@ -316,6 +317,7 @@ namespace Native_Modem
                 new(Operation.TYPE, new string[1] {"ASCII"}),
                 new(Operation.STOR, new string[1] {"Upload"}),
                 new(Operation.SYST, Array.Empty<string>()),
+                new(Operation.MLSD, Array.Empty<string>()),
                 new(Operation.FEAT, Array.Empty<string>()),
                 new(Operation.quit, Array.Empty<string>())
             });
@@ -396,7 +398,10 @@ namespace Native_Modem
                         Send("PASV\r\n");
                         break;
                     case Operation.LIST:
-                        CommandLIST();
+                        CommandPASV($"LIST\r\n");
+                        break;
+                    case Operation.MLSD:
+                        CommandPASV($"MLSD\r\n");
                         break;
                     case Operation.RETR:
                         if (args[1] == null)
@@ -404,7 +409,7 @@ namespace Native_Modem
                             Console.WriteLine("Invalid arguments");
                             break;
                         }
-                        CommandRETR(args[1]);
+                        CommandPASV($"RETR {args[1]}\r\n");
                         break;
                     default:
                         Console.WriteLine("Unknown Command");
@@ -489,7 +494,10 @@ namespace Native_Modem
                     Send("PASV\r\n");
                     break;
                 case Operation.LIST:
-                    CommandLIST();
+                    CommandPASV($"LIST\r\n");
+                    break;
+                case Operation.MLSD:
+                    CommandPASV($"MLSD\r\n");
                     break;
                 case Operation.RETR:
                     if (args[1] == null)
@@ -497,7 +505,7 @@ namespace Native_Modem
                         Console.WriteLine("Invalid arguments");
                         break;
                     }
-                    CommandRETR(args[1]);
+                    CommandPASV($"RETR {args[1]}\r\n");
                     break;
                 default:
                     Console.WriteLine("Unknown Command");
@@ -506,7 +514,7 @@ namespace Native_Modem
 
         }
 
-        public void CommandLIST()
+        public void CommandPASV(string cli)
         {
             Flush();
             if (_pasvport == -1)
@@ -543,7 +551,7 @@ namespace Native_Modem
 
             var receiveData = new byte[256];
             //Send("LIST\r\n");
-            Parallel.Invoke(() => Send($"LIST\r\n"));
+            Parallel.Invoke(() => Send(cli));
 
             // wait for a response
             var dataLength =
@@ -585,83 +593,6 @@ namespace Native_Modem
         }
 
 
-        public void CommandRETR(string path)
-        {
-            Flush();
-            if (_pasvport == -1)
-            {
-                Console.WriteLine("need PASV");
-                return;
-            }
-
-            // start a TCP
-            TcpClient client = null;
-            try
-            {
-                client = new TcpClient(_ipProtocal.IP, _pasvport);
-            }
-            catch (SocketException ex)
-            {
-                Console.WriteLine(ex.ToString());
-            }
-
-            _pasvport = -1;
-            NetworkStream getStream = null;
-            try
-            {
-                getStream = client.GetStream();
-            }
-            catch (SocketException ex)
-            {
-                Console.WriteLine(ex.ToString());
-            }
-
-            _sendOffset = 0;
-            _recOffset = 0;
-
-            var receiveData = new byte[256];
-
-            // Begin to RETR 
-            Parallel.Invoke(() => Send($"RETR {path}\r\n"));
-
-            // wait for a response
-            var dataLength =
-                getStream.Read(receiveData, _recOffset, receiveData.Length);
-            var recvdMessage =
-                System.Text.Encoding.ASCII.GetString(receiveData, 0,
-                    dataLength);
-            Console.WriteLine(recvdMessage.ToString());
-
-            var temp = new byte[dataLength + 1];
-            Array.Copy(receiveData, 0, temp, 1, dataLength);
-            temp[0] = 0xfe;
-            if (_ipProtocal.Node == "2")
-                _ipProtocal.Modem.TransportData(1, temp);
-            _recOffset += dataLength;
-            if (_ipProtocal.Node == "1")
-                Thread.Sleep(3000);
-
-            // wait for a response
-            while (getStream.DataAvailable)
-            {
-                receiveData = new byte[256];
-                dataLength = getStream.Read(receiveData, 0, receiveData.Length);
-                recvdMessage =
-                    System.Text.Encoding.ASCII.GetString(receiveData, 0,
-                        dataLength);
-                Console.WriteLine(recvdMessage.ToString());
-                temp = new byte[dataLength + 1];
-                Array.Copy(receiveData, 0, temp, 1, dataLength);
-                temp[0] = 0xfe;
-                if (_ipProtocal.Node == "2")
-                    _ipProtocal.Modem.TransportData(1, temp);
-                if (_ipProtocal.Node == "1")
-                    Thread.Sleep(3000);
-            }
-
-
-            Flush();
-        }
 
 
     }
