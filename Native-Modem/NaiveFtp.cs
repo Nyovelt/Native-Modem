@@ -20,7 +20,7 @@ namespace Native_Modem
         private int _sendOffset;
         private int _recOffset;
         private int _pasvport = -1;
-        private const string Hostname = "127.0.0.1";
+        private const string Hostname = "140.110.96.68";
 
         public NaiveFtp()
         {
@@ -90,7 +90,7 @@ namespace Native_Modem
         {
             try
             {
-                _tcpClient = new TcpClient("127.0.0.1", 21); //or 127.0.0.1
+                _tcpClient = new TcpClient(Hostname, 21); //or 127.0.0.1
             }
             catch (SocketException ex)
             {
@@ -164,16 +164,38 @@ namespace Native_Modem
                     _ipProtocal.Modem.TransportData(2, temp);
                     while (_ipProtocal.flag == false) { }
 
+                    
+                    var result = new byte[0];
                     // Process the data sent by the client.
                     while (_ipProtocal.savedData.TryDequeue(out var savedData))
                     {
                         // Send back a response.
-                        stream.Write(savedData, 0, savedData.Length);
-                        Console.WriteLine("Sent: {0}", System.Text.Encoding.ASCII.GetString(savedData, 0, savedData.Length));
+                        AppendSpecifiedBytes(ref result, savedData);
                     }
+                    stream.Write(result, 0, result.Length);
+                    Console.WriteLine("Sent: {0}", System.Text.Encoding.ASCII.GetString(result, 0, result.Length));
                     _ipProtocal.flag = false;
 
                 }
+            }
+        }
+
+
+        
+
+        public void AppendSpecifiedBytes(ref byte[] dst, byte[] src)
+        {
+            // Get the starting length of dst
+            int i = dst.Length;
+            // Resize dst so it can hold the bytes in src
+            Array.Resize(ref dst, dst.Length + src.Length);
+            // For each element in src
+            for (int j = 0; j < src.Length; j++)
+            {
+                // Add the element to dst
+                dst[i] = src[j];
+                // Increment dst index
+                i++;
             }
         }
 
