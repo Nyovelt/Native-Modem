@@ -396,6 +396,7 @@ namespace Native_Modem
                         break;
                     default:
                         Console.WriteLine("Unknown Command");
+                        Send($"{args[0]}\r\n");
                         break;
                 }
             }
@@ -482,6 +483,7 @@ namespace Native_Modem
                     break;
                 default:
                     Console.WriteLine("Unknown Command");
+                    Send($"{args[0]}\r\n");
                     break;
             }
 
