@@ -20,12 +20,12 @@ namespace Native_Modem
         private TcpListener _tcpListener;
         private int _sendOffset;
         private int _recOffset;
-        private const string Hostname = "127.0.0.1";
+        private const string Hostname = "10.11.135.168";
         private int _pasvport = -1;
 
         public NaiveFtp()
         {
-            //ipProtocal = new IpProtocal();
+            _ipProtocal = new IpProtocal();
             //ftpClient = new FtpClient("127.0.0.1", 9000, "ftptest", "ftptest");
 
             Initialize();
@@ -43,7 +43,7 @@ namespace Native_Modem
         {
             // Start TCP Listener
             var port = 19000;
-            IPAddress localAddr = IPAddress.Parse("127.0.0.1");
+            IPAddress localAddr = IPAddress.Parse("10.11.135.168");
             _tcpListener = new TcpListener(localAddr, port);
             _tcpListener.Start();
             var t = new Thread(AthernetTunnel);
@@ -100,20 +100,24 @@ namespace Native_Modem
                 int i;
 
                 // Loop to receive all the data sent by the client.
-                while ((i = stream.Read(bytes, 0, bytes.Length)) != 0)
+                while (true)
                 {
+                    i = stream.Read(bytes, 0, bytes.Length);
                     // Translate data bytes to a ASCII string.
                     data = System.Text.Encoding.ASCII.GetString(bytes, 0, i);
                     Console.WriteLine("Received: {0}", data);
-
+                    
                     // Process the data sent by the client.
-                    data = data.ToUpper();
+                    while(_ipProtocal.savedData.TryDequeue(out var savedData))
+                    {
+                          
 
-                    byte[] msg = System.Text.Encoding.ASCII.GetBytes(data);
+                        // Send back a response.
+                        stream.Write(savedData, 0, savedData.Length);
+                        Console.WriteLine("Sent: {0}", System.Text.Encoding.ASCII.GetString(savedData, 0, savedData.Length));
+                    }
 
-                    // Send back a response.
-                    stream.Write(msg, 0, msg.Length);
-                    Console.WriteLine("Sent: {0}", data);
+                
                 }
             }
         }
