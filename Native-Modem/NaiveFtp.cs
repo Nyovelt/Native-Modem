@@ -176,7 +176,7 @@ namespace Native_Modem
 
         private void Send(string message)
         {
-            message = message.Substring(0, Math.Max(0, message.IndexOf('\0')));
+            //message = message.Substring(0, Math.Max(0, message.IndexOf('\0')));
             Flush();
             Console.WriteLine($"Sending {message}");
             var data = System.Text.Encoding.ASCII.GetBytes(message);
