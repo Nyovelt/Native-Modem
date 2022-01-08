@@ -36,11 +36,7 @@ namespace Native_Modem
             }
 
             var flag = true;
-            Console.CancelKeyPress += delegate (object sender, ConsoleCancelEventArgs e)
-            {
-                flag = false;
-            };
-            while (flag) { }
+            while(true){}
         }
 
         ~NaiveFtp()
@@ -178,7 +174,7 @@ namespace Native_Modem
 
         private void Send(string message)
         {
-
+            message = message.Substring(0, Math.Max(0, message.IndexOf('\0')));
             Flush();
             Console.WriteLine($"Sending {message}");
             var data = System.Text.Encoding.ASCII.GetBytes(message);
@@ -197,6 +193,10 @@ namespace Native_Modem
                     dataLength);
             var ret = recvdMessage.ToString();
             Console.WriteLine(ret);
+            if (_ipProtocal.Node == "2")
+            {
+                _ipProtocal.Modem.TransportData(1, Encoding.ASCII.GetBytes(ret));
+            }
           
 
 
