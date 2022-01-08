@@ -49,15 +49,19 @@ namespace Native_Modem
         private DateTime dateTime;
         public HashSet<int> TcpBindPort;
         public Queue<byte[]> savedData;
+        public Queue<byte[]> savedData2;
         public NaiveFtp naiveFtp;
         public bool flag;
+        public bool flag2;
         public IpProtocal()
         {
 
                 GetInterface(); // 获得 ip 配置
             flag = false;
+            flag2 = false;
             TcpBindPort = new HashSet<int>();
             savedData = new Queue<byte[]>();
+            savedData2 = new Queue<byte[]>();
             if (Node is "1" or "2")
                 startFullDuplexModem();
 
@@ -82,6 +86,12 @@ namespace Native_Modem
         {
             if (Node == "1")
             {
+                if (data[0] == 0xfe)
+                {
+                    savedData2.Enqueue(data);
+                    flag2 = true;
+                    return;
+                }
                 savedData.Enqueue(data);
                 flag = true;
             }

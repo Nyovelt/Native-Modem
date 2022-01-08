@@ -36,14 +36,13 @@ namespace Native_Modem
             }
 
             var flag = true;
-            while(true){}
+            while (true) { }
         }
 
         ~NaiveFtp()
         {
             _tcpListener.Stop();
         }
-
 
 
         private void Initialize()
@@ -134,9 +133,9 @@ namespace Native_Modem
                 data = null;
 
                 // Get a stream object for reading and writing
-               
+
                 NetworkStream stream = client.GetStream();
-   
+
 
                 while (_ipProtocal.flag == false) { }
 
@@ -148,7 +147,7 @@ namespace Native_Modem
                 }
                 _ipProtocal.flag = false;
                 int i;
-                
+
                 // Loop to receive all the data sent by the client.
                 while (true)
                 {
@@ -172,6 +171,42 @@ namespace Native_Modem
 
                 }
             }
+        }
+
+        private void pasvTunnel(int port)
+        {
+            // Start TCP Listener
+            IPAddress localAddr = IPAddress.Parse(_ipProtocal.IP); //or 127.0.0.1
+            var listener = new TcpListener(localAddr, port);
+            listener.Start();
+
+            // Buffer for reading data
+            var bytes = new byte[256];
+            string data = null;
+
+
+            // Perform a blocking call to accept requests.
+            // You could also use server.AcceptSocket() here.
+            TcpClient client = listener.AcceptTcpClient();
+            Console.WriteLine("Connected!");
+
+            data = null;
+
+            // Get a stream object for reading and writing
+
+            NetworkStream stream = client.GetStream();
+
+
+            while (_ipProtocal.flag2 == false) { }
+
+            while (_ipProtocal.savedData2.TryDequeue(out var savedData))
+            {
+                // Send back a response.
+                stream.Write(savedData, 0, savedData.Length);
+                Console.WriteLine("Sent: {0}", System.Text.Encoding.ASCII.GetString(savedData, 0, savedData.Length));
+            }
+            _ipProtocal.flag2 = false;
+            
         }
 
         private void Send(string message)
@@ -199,7 +234,7 @@ namespace Native_Modem
             {
                 _ipProtocal.Modem.TransportData(1, Encoding.ASCII.GetBytes(ret));
             }
-          
+
 
 
 
@@ -214,6 +249,7 @@ namespace Native_Modem
                     int.Parse(ret.Split(',')[5]));
                 _pasvport = int.Parse(ret.Split(',')[4]) * 256 +
                             int.Parse(ret.Split(',')[5]);
+                Parallel.Invoke(()=>pasvTunnel(_pasvport));
 
             }
 
@@ -350,7 +386,7 @@ namespace Native_Modem
         public void Parse(string cli)
         {
 
-            var args = cli?.Replace("\r","").Replace("\n", "").Split(' ');
+            var args = cli?.Replace("\r", "").Replace("\n", "").Split(' ');
             if (args is { Length: 0 })
                 return;
             if (!Enum.TryParse(args[0], true, out Operation op))
@@ -447,9 +483,10 @@ namespace Native_Modem
             catch (SocketException ex)
             {
                 Console.WriteLine(ex.ToString());
+                _pasvport = -1;
             }
 
-            _pasvport = -1;
+
             NetworkStream getStream = null;
             try
             {
@@ -466,6 +503,7 @@ namespace Native_Modem
             var receiveData = new byte[256];
             //Send("LIST\r\n");
             Parallel.Invoke(() => Send($"LIST\r\n"));
+
             // wait for a response
             var dataLength =
                 getStream.Read(receiveData, _recOffset, receiveData.Length);
@@ -473,13 +511,12 @@ namespace Native_Modem
                 System.Text.Encoding.ASCII.GetString(receiveData, 0,
                     dataLength);
             Console.WriteLine(recvdMessage.ToString());
+            var temp = new byte[dataLength + 1];
+            Array.Copy(receiveData, 0, temp, 1, dataLength);
+            temp[0] = 0xfe;
+            if (_ipProtocal.Node == "2")
+                _ipProtocal.Modem.TransportData(1, temp);
             _recOffset += dataLength;
-
-            // Begin to List 
-            //Console.WriteLine($"Sending LIST");
-            //var data = System.Text.Encoding.ASCII.GetBytes("LIST\r\n");
-            //stream.Write(data, 0, data.Length);
-            //sendOffset += data.Length;
 
 
 
@@ -492,8 +529,13 @@ namespace Native_Modem
                     System.Text.Encoding.ASCII.GetString(receiveData, 0,
                         dataLength);
                 Console.WriteLine(recvdMessage.ToString());
+                 temp = new byte[dataLength + 1];
+                Array.Copy(receiveData, 0, temp, 1, dataLength);
+                temp[0] = 0xfe;
+                if (_ipProtocal.Node == "2")
+                    _ipProtocal.Modem.TransportData(1, temp);
             }
-
+            _pasvport = -1;
 
             Flush();
         }
