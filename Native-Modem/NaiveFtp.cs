@@ -35,6 +35,10 @@ namespace Native_Modem
                 _ipProtocal.Modem?.Dispose();
             }
 
+            if (_ipProtocal.Node == "2")
+            {
+                _ipProtocal.IP = Hostname;
+            }
             var flag = true;
             while (true) { }
         }
@@ -198,7 +202,7 @@ namespace Native_Modem
 
 
             while (_ipProtocal.flag2 == false) { }
-            
+
             while (_ipProtocal.savedData2.TryDequeue(out var savedData))
             {
                 // Send back a response.
@@ -535,7 +539,8 @@ namespace Native_Modem
             if (_ipProtocal.Node == "2")
                 _ipProtocal.Modem.TransportData(1, temp);
             _recOffset += dataLength;
-            Thread.Sleep(3000);
+            if (_ipProtocal.Node == "1")
+                Thread.Sleep(3000);
 
 
             // wait for a response
@@ -552,7 +557,8 @@ namespace Native_Modem
                 temp[0] = 0xfe;
                 if (_ipProtocal.Node == "2")
                     _ipProtocal.Modem.TransportData(1, temp);
-                Thread.Sleep(3000);
+                if (_ipProtocal.Node == "1")
+                    Thread.Sleep(3000);
             }
             _pasvport = -1;
 
@@ -606,15 +612,16 @@ namespace Native_Modem
                 System.Text.Encoding.ASCII.GetString(receiveData, 0,
                     dataLength);
             Console.WriteLine(recvdMessage.ToString());
-           
+
             var temp = new byte[dataLength + 1];
             Array.Copy(receiveData, 0, temp, 1, dataLength);
             temp[0] = 0xfe;
             if (_ipProtocal.Node == "2")
                 _ipProtocal.Modem.TransportData(1, temp);
             _recOffset += dataLength;
-            Thread.Sleep(3000);
-       
+            if (_ipProtocal.Node == "1")
+                Thread.Sleep(3000);
+
             // wait for a response
             while (getStream.DataAvailable)
             {
@@ -629,7 +636,8 @@ namespace Native_Modem
                 temp[0] = 0xfe;
                 if (_ipProtocal.Node == "2")
                     _ipProtocal.Modem.TransportData(1, temp);
-                Thread.Sleep(3000);
+                if (_ipProtocal.Node == "1")
+                    Thread.Sleep(3000);
             }
 
 
