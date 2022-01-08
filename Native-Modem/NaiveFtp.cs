@@ -204,7 +204,7 @@ namespace Native_Modem
                 // Send back a response.
                 stream.Write(savedData, 0, savedData.Length);
                 Console.WriteLine("Sent: {0}", System.Text.Encoding.ASCII.GetString(savedData, 0, savedData.Length));
-                Thread.Sleep(3000);
+                Thread.Sleep(2000);
             }
             _ipProtocal.flag2 = false;
 
@@ -529,7 +529,7 @@ namespace Native_Modem
             _recOffset += dataLength;
 
 
-
+            
             // wait for a response
             while (getStream.DataAvailable)
             {
@@ -544,6 +544,7 @@ namespace Native_Modem
                 temp[0] = 0xfe;
                 if (_ipProtocal.Node == "2")
                     _ipProtocal.Modem.TransportData(1, temp);
+                Thread.Sleep(3000);
             }
             _pasvport = -1;
 
