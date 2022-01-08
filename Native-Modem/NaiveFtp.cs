@@ -527,9 +527,9 @@ namespace Native_Modem
             if (_ipProtocal.Node == "2")
                 _ipProtocal.Modem.TransportData(1, temp);
             _recOffset += dataLength;
+            Thread.Sleep(3000);
 
 
-            
             // wait for a response
             while (getStream.DataAvailable)
             {
