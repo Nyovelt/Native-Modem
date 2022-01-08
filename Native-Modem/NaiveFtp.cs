@@ -198,12 +198,13 @@ namespace Native_Modem
 
 
             while (_ipProtocal.flag2 == false) { }
-
+            
             while (_ipProtocal.savedData2.TryDequeue(out var savedData))
             {
                 // Send back a response.
                 stream.Write(savedData, 0, savedData.Length);
                 Console.WriteLine("Sent: {0}", System.Text.Encoding.ASCII.GetString(savedData, 0, savedData.Length));
+                Thread.Sleep(3000);
             }
             _ipProtocal.flag2 = false;
 
@@ -251,7 +252,7 @@ namespace Native_Modem
                             int.Parse(ret.Split(',')[5]);
                 if (_ipProtocal.Node == "1")
                 {
-                    Thread t = new Thread(()=> pasvTunnel(_pasvport));
+                    Thread t = new Thread(() => pasvTunnel(_pasvport));
                     t.Start();
                 }
 
@@ -271,7 +272,12 @@ namespace Native_Modem
                         dataLength);
                 var ret = recvdMessage.ToString();
                 Console.WriteLine(ret);
-                _ipProtocal.Modem.TransportData(1, receiveData);
+                if (_ipProtocal.Node == "2")
+                {
+                    var temp = new byte[dataLength];
+                    Array.Copy(receiveData, temp, dataLength);
+                    _ipProtocal.Modem.TransportData(1, temp);
+                }
             }
         }
 
