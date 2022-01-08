@@ -88,7 +88,9 @@ namespace Native_Modem
             {
                 if (data[0] == 0xfe)
                 {
-                    savedData2.Enqueue(data);
+                    var temp = new byte[data.Length - 1];
+                    Array.Copy(data, 1, temp, 0, temp.Length);
+                    savedData2.Enqueue(temp);
                     flag2 = true;
                     return;
                 }
