@@ -482,7 +482,7 @@ namespace Native_Modem
             TcpClient client = null;
             try
             {
-                client = new TcpClient(Hostname, _pasvport);
+                client = new TcpClient(_ipProtocal.IP, _pasvport);
             }
             catch (SocketException ex)
             {
