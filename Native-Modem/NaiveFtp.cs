@@ -307,7 +307,7 @@ namespace Native_Modem
                 new(Operation.START, Array.Empty<string>()),
                 new(Operation.USER, new string[1] {"Username"}),
                 new(Operation.PASS, new string[1] {"Password"}),
-                new(Operation.PWD, new string[1] {"P Working Directory"}),
+                new(Operation.PWD, Array.Empty<string>()),
                 new(Operation.CWD, new string[1] {"Current Working Directory"}),
                 new(Operation.PASV, Array.Empty<string>()),
                 new(Operation.LIST, Array.Empty<string>()),
@@ -362,13 +362,9 @@ namespace Native_Modem
                         Send($"PASS {args[1]}\r\n");
                         break;
                     case Operation.PWD:
-                        if (args[1] == null)
-                        {
-                            Console.WriteLine("Invalid arguments");
-                            break;
-                        }
 
-                        Send($"PWD {args[1]}\r\n");
+
+                        Send("PWD\r\n");
                         break;
                     case Operation.SYST:
                         Send($"SYST\r\n");
@@ -451,13 +447,8 @@ namespace Native_Modem
                     Send($"PASS {args[1]}\r\n");
                     break;
                 case Operation.PWD:
-                    if (args[1] == null)
-                    {
-                        Console.WriteLine("Invalid arguments");
-                        break;
-                    }
 
-                    Send($"PWD {args[1]}\r\n");
+                    Send("PWD\r\n");
                     break;
                 case Operation.CWD:
                     if (args[1] == null)
