@@ -45,11 +45,11 @@ namespace Native_Modem
         public bool Natrecv;
         public string NatrecvArg;
         public string Node3Ip;
-        private pingstate pingstat;
         public Timer Timer;
         private DateTime dateTime;
         public HashSet<int> TcpBindPort;
         public Queue<byte[]> savedData;
+        public NaiveFtp naiveFtp;
         public IpProtocal()
         {
 
@@ -57,10 +57,6 @@ namespace Native_Modem
 
             TcpBindPort = new HashSet<int>();
             savedData = new Queue<byte[]>();
-            Device?.Open();
-            if (Device != null)
-                Device.OnPacketArrival += Device_OnPacketArrival;
-            Device?.StartCapture();
             if (Node is "1" or "2")
                 startFullDuplexModem();
 
@@ -72,32 +68,6 @@ namespace Native_Modem
             Modem?.Dispose();
         }
 
-        private enum Operation
-        {
-            printsocket,
-            sendsocket,
-            natsend,
-            natrecv,
-            ping,
-            quit
-        }
-
-        private enum pingstate
-        {
-            Waitforecho,
-            Idle
-        }
-
-        static readonly Dictionary<Operation, string[]> Arguments = new(
-    new KeyValuePair<Operation, string[]>[]
-            {
-                new(Operation.printsocket, new string[1] { "source address" }),
-                new(Operation.sendsocket, new string[1] { "destination address" }),
-                new(Operation.natsend, new string[2] { "file path","destination" }),
-                new(Operation.natrecv, new string[1] { "source address" }),
-                new(Operation.ping, new string[1] { "destination" }),
-                new(Operation.quit, Array.Empty<string>())
-            });
 
         public void Dispose()
         {
@@ -105,384 +75,20 @@ namespace Native_Modem
             Device?.Close();
         }
 
-        public void Shell()
-        {
-            bool quit = false;
-            // 寻找一个更好的交互式内建命令框架 // 失败
-            while (!quit)
-            {
-                Console.Write(">");
-                var args = Console.ReadLine()?.Split(' ');
-                if (args is { Length: 0 })
-                    continue;
-
-                if (!Enum.TryParse(args[0], true, out Operation op))
-                {
-                    Console.WriteLine("Invalid operation. Type 'help' to show help.");
-                    continue;
-                }
-
-                if (args.Length != Arguments[op].Length + 1)
-                {
-                    Console.WriteLine("Argument count error. Type 'help' to show help.");
-                    continue;
-                }
-
-                switch (op)
-                {
-                    case Operation.printsocket:
-                        if (args[1] == null)
-                        {
-                            Console.WriteLine("Invalid arguments.");
-                            break;
-                        }
-
-                        if (Node == "1")
-                        {
-                            Console.WriteLine("Node 1 cannot do printsocket");
-                            break;
-                        }
-                        var pingSource = args[1];
-                        Printsocketison = true;
-                        PrintsocketisonArg = pingSource;
-                        Console.CancelKeyPress += delegate (object sender, ConsoleCancelEventArgs e)
-                        {
-                            Printsocketison = false;
-                            PrintsocketisonArg = null;
-                        };
-                        while (Printsocketison)
-                        {
-                        }
-
-                        Console.WriteLine("Exit printsocket");
-
-                        break;
-                    case Operation.sendsocket:
-                        if (Node == "1")
-                        {
-                            Console.WriteLine("Node 1 cannot do sendsocket");
-                            break;
-                        }
-                        if (args[1] == null)
-                        {
-                            Console.WriteLine("Invalid arguments.");
-                            break;
-                        }
-
-                        var pingDst = args[1];
-                        for (int i = 0; i < 10; i++)
-                        {
-                            Sendsocket(pingDst);
-                            System.Threading.Thread.Sleep(1000);
-                        }
-
-                        Console.WriteLine("Finish sendsocket");
-                        break;
-                    case Operation.natsend:
-                        byte[] input;
-                        if (args[1] == null)
-                        {
-                            Console.WriteLine("Invalid arguments.");
-                            break;
-                        }
-                        if (File.Exists(args[1]))
-                        {
-                            BinaryReader inputStream = new BinaryReader(new FileStream(args[1], FileMode.Open, FileAccess.Read));
-                            input = inputStream.ReadBytes((int)inputStream.BaseStream.Length);
-                            inputStream.Close();
-                        }
-                        else
-                        {
-                            Console.Write("Folder doesn't exist. Retry: ");
-                            break;
-                        }
-
-                        if (Node == "1")
-                        {
-                            var packet = ConstructUdp(input, args[2]);
-                            Console.WriteLine("sendfile to NAT");
-                            Modem.TransportData(2, packet.Bytes);
-                        }
-
-                        if (Node == "3")
-                        {
-                            Console.WriteLine("sendfile to NAT");
-                            SendUdp(input, args[2]);
-                        }
-                        break;
-                    case Operation.natrecv:
-                        if (Node == "2")
-                        {
-                            Console.WriteLine("Node 2 cannot do natrecv");
-                            break;
-                        }
-                        Natrecv = true;
-                        if (args[1] != null)
-                        {
-                            NatrecvArg = args[1];
-                        }
-                        Console.CancelKeyPress += delegate (object sender, ConsoleCancelEventArgs e)
-                        {
-                            Natrecv = false; NatrecvArg = null;
-                        };
-                        while (Natrecv)
-                        {
-                        }
-                        Console.WriteLine("Exit natrecv");
-                        break;
-                    case Operation.ping:
-                        if (Node != "1")
-                        {
-                            Console.WriteLine("Do not support ping except Node 1");
-                            break;
-                        }
-
-
-                        Natping(args[1]);
-
-
-                        break;
-                    case Operation.quit:
-                        quit = true;
-                        break;
-                    default:
-                        break;
-
-                }
-            }
-        }
-
-        private void Natping(string destination)
-        {
-            var data = ConstructICMP(destination,
-                IcmpV4TypeCode.EchoRequest).Bytes;
-            pingstat = pingstate.Waitforecho;
-            Timer = new Timer();
-            Timer.Interval = 10000d;
-            Timer.AutoReset = false;
-            Timer.Elapsed += (sender, e) =>
-            {
-                Console.WriteLine("ping timed out");
-                pingstat = pingstate.Idle;
-            };
-            dateTime = DateTime.Now;
-            Timer.Start();
-            Console.WriteLine($"Ping {destination}");
-            Modem.TransportData(2, data);
-        }
-
-        public void Sendsocket(string destination)
-        {
-            var data = new byte[20];
-            var rand = new Random();
-            rand.NextBytes(data);
-            //var packet = ConstructUdpPacket(data, destination);
-            var joinedBytes = string.Join(", ", data.Select(b => b.ToString()));
-            Console.WriteLine($"Sending Packets to {destination}, data: {joinedBytes}");
-            SendUdp(data, destination);
-            //PrintUdpPacket(packet);
-            //Device.SendPacket(packet);
-        }
-
-        public UdpPacket ConstructUdpPacket(byte[] data, string destination)
-        {
-            var packet = new IPv4Packet(IPAddress.Parse(IP), IPAddress.Parse(destination));
-            Console.WriteLine(packet);
-            ByteArraySegment byteArraySegment = new ByteArraySegment(data);
-            var udpPacket = new UdpPacket(byteArraySegment, packet);
-            Console.WriteLine(udpPacket);
-            udpPacket.PayloadData = data;
-            PrintUdpPacket(udpPacket);
-            return udpPacket;
-        }
-
-        public void SendUdp(byte[] dgram, string destination)
-        {
-            ////construct ethernet packet
-            //var ethernet = new EthernetPacket(Device.MacAddress, PhysicalAddress.Parse("665544332211"), EthernetType.IPv4);
-            ////construct local IPV4 packet
-            //var ipv4 = new IPv4Packet(IPAddress.Parse(IP), IPAddress.Parse(destination));
-            ////construct UDP packet
-            //var udp = new UdpPacket(12345, 54321);
-            ////add data in
-            //udp.PayloadData = dgram;
-            //udp.UpdateCalculatedValues();
-            //ipv4.PayloadPacket = udp;
-            //ipv4.UpdateCalculatedValues();
-            //ethernet.PayloadPacket = ipv4;
-            //ethernet.UpdateCalculatedValues();
-            //// Console.WriteLine(ethernet);
-            //Device.SendPacket(ethernet);
-            var server = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
-            server.Bind(new IPEndPoint(IPAddress.Parse(IP), 12345));
-            var endpoint = new IPEndPoint(IPAddress.Parse(destination), 54321);
-            server.SendTo(dgram, endpoint);
-            server.Close();
-        }
-
-        public EthernetPacket ConstructICMP(string destination, IcmpV4TypeCode icmpV4TypeCode)
-        {
-            //construct ethernet packet
-            var ethernet = new EthernetPacket(PhysicalAddress.Parse("112233445566"), PhysicalAddress.Parse("665544332211"), EthernetType.IPv4);
-            //construct local IPV4 packet
-            var ipv4 = new IPv4Packet(IPAddress.Parse(IP), IPAddress.Parse(destination));
-            ethernet.PayloadPacket = ipv4;
-            const string cmdString = "Hello CS120";
-            var sendBuffer = Encoding.ASCII.GetBytes(cmdString);
-            var headerBuffer = new byte[8];
-
-            var icmp = new IcmpV4Packet(new ByteArraySegment(headerBuffer));
-            ipv4.PayloadPacket = icmp;
-            icmp.TypeCode = icmpV4TypeCode;
-            icmp.Checksum = 0;
-            icmp.Sequence = 1;
-            icmp.Id = 1;
-            icmp.PayloadData = new byte[] { 0xff };
-            byte[] bytes = icmp.Bytes;
-            icmp.Checksum = (ushort)ChecksumUtils.OnesComplementSum(bytes, 0, bytes.Length);
-            ipv4.UpdateCalculatedValues();
-            ethernet.UpdateCalculatedValues();
-            return ethernet;
-        }
-
-        public EthernetPacket ConstructUdp(byte[] dgram, string destination)
-        {
-            //construct ethernet packet
-            var ethernet = new EthernetPacket(PhysicalAddress.Parse("112233445566"), PhysicalAddress.Parse("665544332211"), EthernetType.IPv4);
-            //construct local IPV4 packet
-            var ipv4 = new IPv4Packet(IPAddress.Parse(IP), IPAddress.Parse(destination));
-            //construct UDP packet
-            var udp = new UdpPacket(12345, 54321);
-            //add data in
-            udp.PayloadData = dgram;
-            udp.UpdateCalculatedValues();
-            ipv4.PayloadPacket = udp;
-            ipv4.UpdateCalculatedValues();
-            ethernet.PayloadPacket = ipv4;
-            ethernet.UpdateCalculatedValues();
-            // Console.WriteLine(ethernet);
-            return ethernet;
-        }
+        
 
         public void OnPacketreceived(byte source, byte[] data)
         {
             if (Node == "1")
             {
-                var packet = Packet.ParsePacket(LinkLayers.Ethernet, data);
-                if (packet == null)
-                {
-                    Console.WriteLine("Parse Ethrtnat packet error");
-                    return;
-                }
-
-                var ipPacket = packet.Extract<IPPacket>();
-                if (ipPacket == null)
-                {
-                    Console.WriteLine("Parse IP packet error");
-                    return;
-                }
-
-
-
-                var tcpPacket = packet.Extract<TcpPacket>();
-                if (tcpPacket != null)
-                {
-                    savedData.Enqueue(tcpPacket.PayloadData);
-                }
-
-               
-
-
-
+                savedData.Enqueue(data);
             }
 
             if (Node == "2")
             {
-                Console.WriteLine("Forwarding to Node 3");
-                // Decode UDP
-                var packet =
-                    Packet.ParsePacket(LinkLayers.Ethernet, data); // get packet
-                if (packet == null)
-                {
-                    Console.WriteLine("Parse Ethernat packet error");
-                    return;
-                }
-
-                var ipPacket = packet.Extract<IPPacket>();
-                if (ipPacket == null)
-                {
-                    Console.WriteLine("Parse IP packet error");
-                    return;
-                }
-
-
-
-                var tcpPacket = packet.Extract<TcpPacket>();
-                if (tcpPacket != null)
-                {
-                    var server = new Socket(AddressFamily.InterNetwork,
-                        SocketType.Dgram, ProtocolType.Tcp);
-                    server.Bind(new IPEndPoint(IPAddress.Parse(IP), tcpPacket.SourcePort));
-                    TcpBindPort.Add(tcpPacket.SourcePort);
-                    var endpoint =
-                        new IPEndPoint(ipPacket.DestinationAddress, tcpPacket.DestinationPort);
-                    server.SendTo(tcpPacket.PayloadData, endpoint);
-                    server.Close();
-                }
-                Console.WriteLine("Forward Success");
+                naiveFtp.Parse(Encoding.ASCII.GetString(data));
             }
         }
-
-        public void PrintUdpPacket(UdpPacket udpPacket)
-        {
-            var ipPacket = udpPacket.Extract<IPPacket>();
-            if (ipPacket == null) return;
-            var _udpPacket = udpPacket.Extract<UdpPacket>();
-            if (_udpPacket != null)
-            {
-                if (Printsocketison && ipPacket.SourceAddress.ToString() == PrintsocketisonArg)
-                {
-                    var joinedBytes = string.Join(", ", _udpPacket.PayloadData.Select(b => b.ToString()));
-                    Console.WriteLine(
-                        $"SourceIP: {ipPacket.SourceAddress}, DestinationIP: {ipPacket.DestinationAddress}, SourcePort: {_udpPacket.SourcePort}, DestinationPort: {_udpPacket.DestinationPort}, Payload: {joinedBytes}");
-                }
-            }
-        }
-
-        public void Device_OnPacketArrival(object s, PacketCapture e)
-        {
-
-            var packet = Packet.ParsePacket(e.GetPacket().LinkLayerType, e.GetPacket().Data);
-
-            var ipPacket = packet.Extract<IPPacket>();
-
-            if (ipPacket == null) { return; }
-            
-
-            var tcpPacket = packet.Extract<TcpPacket>();
-            if (tcpPacket != null)
-            {
-                if (Node == "1")
-                {
-                    if (ipPacket.SourceAddress.ToString() == IP && ipPacket.DestinationAddress.ToString() == IP)
-                    {
-                        Modem.TransportData(2, packet.Bytes);
-                    }
-                }
-
-                if (Node == "2")
-                {
-                    if (ipPacket.DestinationAddress.ToString() == IP)
-                    {
-                        if (TcpBindPort.Contains(tcpPacket.DestinationPort))
-                        {
-                            Modem.TransportData(1, packet.Bytes);
-                        }
-                    }
-                }
-            }
-        }
-
 
 
         public void GetInterface()

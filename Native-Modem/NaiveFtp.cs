@@ -6,7 +6,7 @@ using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using FluentFTP;
+
 
 namespace Native_Modem
 {
@@ -14,22 +14,25 @@ namespace Native_Modem
     public class NaiveFtp
     {
         private IpProtocal _ipProtocal;
-        private FtpClient _ftpClient;
         private TcpClient _tcpClient;
         private NetworkStream _stream;
         private TcpListener _tcpListener;
         private int _sendOffset;
         private int _recOffset;
-        private const string Hostname = "10.11.135.168";
         private int _pasvport = -1;
+        private const string Hostname = "127.0.0.1";
 
         public NaiveFtp()
         {
             _ipProtocal = new IpProtocal();
-            //ftpClient = new FtpClient("127.0.0.1", 9000, "ftptest", "ftptest");
+            _ipProtocal.naiveFtp = this;
 
-            Initialize();
-            Shell();
+
+            if (_ipProtocal.Node == "1")
+            {
+                Initialize();
+                Shell();
+            }
         }
 
         ~NaiveFtp()
@@ -43,15 +46,44 @@ namespace Native_Modem
         {
             // Start TCP Listener
             var port = 19000;
-            IPAddress localAddr = IPAddress.Parse("10.11.135.168");
+            IPAddress localAddr = IPAddress.Parse(_ipProtocal.IP); //or 127.0.0.1
             _tcpListener = new TcpListener(localAddr, port);
             _tcpListener.Start();
             var t = new Thread(AthernetTunnel);
             t.Start();
             try
             {
-                _tcpClient = new TcpClient(Hostname, 19000);
+                if (_ipProtocal.Node == "1")
+                    _tcpClient = new TcpClient(_ipProtocal.IP, 19000); //or 127.0.0.1
+                if (_ipProtocal.Node == "2")
+                    _tcpClient = new TcpClient("127.0.0.1", 21); //or 127.0.0.1
+            }
+            catch (SocketException ex)
+            {
+                Console.WriteLine(ex.ToString());
+            }
 
+            _stream = _tcpClient.GetStream();
+            _sendOffset = 0;
+            _recOffset = 0;
+
+            var receiveData = new byte[256];
+
+            // wait for a response
+            var dataLength =
+                _stream.Read(receiveData, _recOffset, receiveData.Length);
+            var recvdMessage =
+                System.Text.Encoding.ASCII.GetString(receiveData, 0,
+                    dataLength);
+            Console.WriteLine(recvdMessage.ToString());
+            _recOffset += dataLength;
+        }
+
+        private void Initialize2()
+        {
+            try
+            {
+                _tcpClient = new TcpClient("127.0.0.1", 21); //or 127.0.0.1
             }
             catch (SocketException ex)
             {
@@ -80,8 +112,8 @@ namespace Native_Modem
             Console.WriteLine("AthernetTunnel Start \n");
 
             // Buffer for reading data
-            Byte[] bytes = new Byte[256];
-            String data = null;
+            var bytes = new byte[256];
+            string data = null;
 
             while (true)
             {
@@ -91,11 +123,18 @@ namespace Native_Modem
                 // You could also use server.AcceptSocket() here.
                 TcpClient client = _tcpListener.AcceptTcpClient();
                 Console.WriteLine("Connected!");
+                _ipProtocal.Modem.TransportData(2, Encoding.ASCII.GetBytes("Start"));
 
                 data = null;
 
                 // Get a stream object for reading and writing
                 NetworkStream stream = client.GetStream();
+                while (_ipProtocal.savedData.TryDequeue(out var savedData))
+                {
+                    // Send back a response.
+                    stream.Write(savedData, 0, savedData.Length);
+                    Console.WriteLine("Sent: {0}", System.Text.Encoding.ASCII.GetString(savedData, 0, savedData.Length));
+                }
 
                 int i;
 
@@ -106,24 +145,25 @@ namespace Native_Modem
                     // Translate data bytes to a ASCII string.
                     data = System.Text.Encoding.ASCII.GetString(bytes, 0, i);
                     Console.WriteLine("Received: {0}", data);
-                    
+
                     // Process the data sent by the client.
-                    while(_ipProtocal.savedData.TryDequeue(out var savedData))
+                    while (_ipProtocal.savedData.TryDequeue(out var savedData))
                     {
-                          
+
 
                         // Send back a response.
                         stream.Write(savedData, 0, savedData.Length);
                         Console.WriteLine("Sent: {0}", System.Text.Encoding.ASCII.GetString(savedData, 0, savedData.Length));
                     }
 
-                
+
                 }
             }
         }
 
         private void Send(string message)
         {
+            
             Flush();
             Console.WriteLine($"Sending {message}");
             var data = System.Text.Encoding.ASCII.GetBytes(message);
@@ -142,6 +182,7 @@ namespace Native_Modem
                     dataLength);
             var ret = recvdMessage.ToString();
             Console.WriteLine(ret);
+            _ipProtocal.Modem.TransportData(1, Encoding.ASCII.GetBytes(ret));
 
 
 
@@ -150,7 +191,7 @@ namespace Native_Modem
             if (message == "PASV\r\n" && ret.Split(' ')[0] == "227")
             {
                 ret = (ret.Split(' ')[4]).Replace("\r", "").Replace("\n", "")
-                    .Replace("(", "").Replace(")", "").Replace(".","");
+                    .Replace("(", "").Replace(")", "").Replace(".", "");
                 Console.WriteLine("PASV port changed to {0}",
                     int.Parse(ret.Split(',')[4]) * 256 +
                     int.Parse(ret.Split(',')[5]));
@@ -173,11 +214,13 @@ namespace Native_Modem
                         dataLength);
                 var ret = recvdMessage.ToString();
                 Console.WriteLine(ret);
+                _ipProtocal.Modem.TransportData(1, receiveData);
             }
         }
 
         private enum Operation
         {
+            START,
             USER, //登录FTP的用户名
             PASS, //登录FTP的密码
             PWD,
@@ -192,6 +235,7 @@ namespace Native_Modem
         static readonly Dictionary<Operation, string[]> Arguments = new(
             new KeyValuePair<Operation, string[]>[]
             {
+                new(Operation.START, Array.Empty<string>()),
                 new(Operation.USER, new string[1] {"Username"}),
                 new(Operation.PASS, new string[1] {"Password"}),
                 new(Operation.PWD, new string[1] {"P Working Directory"}),
@@ -234,8 +278,7 @@ namespace Native_Modem
                             Console.WriteLine("Invalid arguments");
                             break;
                         }
-
-                        Send($"USER {args[1]}\r\n");
+                        _ipProtocal.Modem.TransportData(2, Encoding.ASCII.GetBytes($"USER {args[1]}"));
                         break;
                     case Operation.PASS:
                         if (args[1] == null)
@@ -243,8 +286,7 @@ namespace Native_Modem
                             Console.WriteLine("Invalid arguments");
                             break;
                         }
-
-                        Send($"PASS {args[1]}\r\n");
+                        _ipProtocal.Modem.TransportData(2, Encoding.ASCII.GetBytes($"PASS {args[1]}"));
                         break;
                     case Operation.PWD:
                         if (args[1] == null)
@@ -252,8 +294,7 @@ namespace Native_Modem
                             Console.WriteLine("Invalid arguments");
                             break;
                         }
-
-                        Send($"PWD {args[1]}\r\n");
+                        _ipProtocal.Modem.TransportData(2, Encoding.ASCII.GetBytes($"PWD {args[1]}"));
                         break;
                     case Operation.CWD:
                         if (args[1] == null)
@@ -261,14 +302,13 @@ namespace Native_Modem
                             Console.WriteLine("Invalid arguments");
                             break;
                         }
-
-                        Send($"CWD {args[1]}\r\n");
+                        _ipProtocal.Modem.TransportData(2, Encoding.ASCII.GetBytes($"CWD {args[1]}"));
                         break;
                     case Operation.PASV:
-                        Send("PASV\r\n");
+                        _ipProtocal.Modem.TransportData(2, Encoding.ASCII.GetBytes("PASV\r\n"));
                         break;
                     case Operation.LIST:
-                        CommandLIST();
+                        _ipProtocal.Modem.TransportData(2, Encoding.ASCII.GetBytes("LIST"));
                         break;
                     case Operation.RETR:
                         if (args[1] == null)
@@ -276,7 +316,7 @@ namespace Native_Modem
                             Console.WriteLine("Invalid arguments");
                             break;
                         }
-                        CommandRETR(args[1]);
+                        _ipProtocal.Modem.TransportData(2, Encoding.ASCII.GetBytes($"RETR {args[1]}"));
                         break;
                     default:
                         Console.WriteLine("Unknown Command");
@@ -285,6 +325,88 @@ namespace Native_Modem
             }
         }
 
+
+        public void Parse(string cli)
+        {
+
+            var args = cli?.Split(' ');
+            if (args is { Length: 0 })
+                return;
+            if (!Enum.TryParse(args[0], true, out Operation op))
+            {
+                Console.WriteLine(
+                    "Invalid operation. Type 'help' to show help.");
+                return;
+            }
+
+            if (args.Length != Arguments[op].Length + 1)
+            {
+                Console.WriteLine(
+                    "Argument count error. Type 'help' to show help.");
+                return;
+            }
+
+            switch (op)
+            {
+                case Operation.START:
+                    Initialize2();
+                    break;
+                case Operation.USER:
+                    if (args[1] == null)
+                    {
+                        Console.WriteLine("Invalid arguments");
+                        break;
+                    }
+
+                    Send($"USER {args[1]}\r\n");
+                    break;
+                case Operation.PASS:
+                    if (args[1] == null)
+                    {
+                        Console.WriteLine("Invalid arguments");
+                        break;
+                    }
+
+                    Send($"PASS {args[1]}\r\n");
+                    break;
+                case Operation.PWD:
+                    if (args[1] == null)
+                    {
+                        Console.WriteLine("Invalid arguments");
+                        break;
+                    }
+
+                    Send($"PWD {args[1]}\r\n");
+                    break;
+                case Operation.CWD:
+                    if (args[1] == null)
+                    {
+                        Console.WriteLine("Invalid arguments");
+                        break;
+                    }
+
+                    Send($"CWD {args[1]}\r\n");
+                    break;
+                case Operation.PASV:
+                    Send("PASV\r\n");
+                    break;
+                case Operation.LIST:
+                    CommandLIST();
+                    break;
+                case Operation.RETR:
+                    if (args[1] == null)
+                    {
+                        Console.WriteLine("Invalid arguments");
+                        break;
+                    }
+                    CommandRETR(args[1]);
+                    break;
+                default:
+                    Console.WriteLine("Unknown Command");
+                    break;
+            }
+
+        }
 
         public void CommandLIST()
         {
@@ -404,7 +526,7 @@ namespace Native_Modem
             Console.WriteLine(recvdMessage.ToString());
             _recOffset += dataLength;
 
-            
+
             // wait for a response
             while (getStream.DataAvailable)
             {
