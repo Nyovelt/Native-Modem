@@ -197,7 +197,7 @@ namespace Native_Modem
                     dataLength);
             var ret = recvdMessage.ToString();
             Console.WriteLine(ret);
-            _ipProtocal.Modem.TransportData(1, Encoding.ASCII.GetBytes(ret));
+          
 
 
 
