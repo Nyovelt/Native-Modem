@@ -20,7 +20,8 @@ namespace Native_Modem
         private int _sendOffset;
         private int _recOffset;
         private int _pasvport = -1;
-        private const string Hostname = "140.110.96.68";
+        private const string Hostname = "192.168.196.59";
+        string command = null;
 
         public NaiveFtp()
         {
@@ -93,7 +94,7 @@ namespace Native_Modem
         {
             try
             {
-                _tcpClient = new TcpClient(Hostname, 21); //or 127.0.0.1
+                _tcpClient = new TcpClient(Hostname, 23); //or 127.0.0.1
             }
             catch (SocketException ex)
             {
