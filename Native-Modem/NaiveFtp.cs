@@ -32,8 +32,9 @@ namespace Native_Modem
             if (_ipProtocal.Node == "1")
             {
                 Initialize();
-                Shell();
-                _ipProtocal.Modem?.Dispose();
+                AthernetTunnel();
+                //Shell();
+                //_ipProtocal.Modem?.Dispose();
             }
 
             if (_ipProtocal.Node == "2")
@@ -57,9 +58,10 @@ namespace Native_Modem
             IPAddress localAddr = IPAddress.Parse(_ipProtocal.IP); //or 127.0.0.1
             _tcpListener = new TcpListener(localAddr, port);
             _tcpListener.Start();
+            return;
             var t = new Thread(AthernetTunnel);
             t.Start();
-            //return;
+           
             try
             {
                 if (_ipProtocal.Node == "1")
