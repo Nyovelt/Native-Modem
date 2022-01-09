@@ -176,6 +176,25 @@ namespace Native_Modem
                         // Send back a response.
                         stream.Write(savedData, 0, savedData.Length);
                         Console.WriteLine("Sent: {0}", System.Text.Encoding.ASCII.GetString(savedData, 0, savedData.Length));
+                        var ret  = Encoding.ASCII.GetString(savedData, 0, savedData.Length);
+                        if ( ret.Split(' ')[0] == "227")
+                        {
+                            ret = (ret.Split(' ')[4]).Replace("\r", "").Replace("\n", "")
+                                .Replace("(", "").Replace(")", "").Replace(".", "");
+                            Console.WriteLine("PASV port changed to {0}",
+                                int.Parse(ret.Split(',')[4]) * 256 +
+                                int.Parse(ret.Split(',')[5]));
+                            _pasvport = int.Parse(ret.Split(',')[4]) * 256 +
+                                        int.Parse(ret.Split(',')[5]);
+                            if (_ipProtocal.Node == "1")
+                            {
+                                Thread t = new Thread(() => pasvTunnel(_pasvport));
+                                t.Start();
+                            }
+
+                        }
+
+
                     }
                     stream = client.GetStream();
                     
