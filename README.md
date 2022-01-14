@@ -35,21 +35,21 @@
 
 ![](https://i.imgur.com/pMETLEZ.png)
 
-对于传入的 bit array, 我们采用自制与里的所罗门混合的校验与纠错机制
+对于传入的 bit array, 我们采用自制与里德-所罗门码混合的校验与纠错机制
 
 ![](https://i.imgur.com/puMnb6i.png)
 
-其中，对于要传入的数据，我们按照 $14 \times 7=98$ bit 将其分成若干 frames。对于每个 frame, 将其分成 14 个 7 bits。对于这 14 个 7 bits, 我们使用[里的所罗门算法](https://zh.wikipedia.org/zh-hans/%E9%87%8C%E5%BE%B7-%E6%89%80%E7%BD%97%E9%97%A8%E7%A0%81) 生成 7 个 7bits 的 ECC 块。对于这 20 个 7 bits，我们规定其最后一位为前 7 个 bits 中 1 的个数是否为偶数的 0，1 值。
+其中，对于要传入的数据，我们按照 $14 \times 7=98$ bit 将其分成若干 frames。对于每个 frame, 将其分成 14 个 7 bits。对于这 14 个 7 bits, 我们使用[里德-所罗门码](https://zh.wikipedia.org/zh-hans/%E9%87%8C%E5%BE%B7-%E6%89%80%E7%BD%97%E9%97%A8%E7%A0%81) 生成 7 个 7bits 的 ECC 块。对于这 20 个 7 bits，我们规定其最后一位为前 7 个 bits 中 1 的个数是否为偶数的 0，1 值。
 
 这样对于收到的 frames，只要接受到对的数据块至少14个，就可以还原出原本的 98 bits。在完成这一步之后，数据传输正确率可以做到几乎每次 100%。
 
-通过观察，我们发现 Athernet 的错误特点是传输过程中会有连续数据的错误，因此对于我们的设计，横向数据（即每个 frame 中的数据）连续错误的概率较大。因此我们设想如果我们能“竖着”对其做里的所罗门算法可以提高对错误发生的针对性。
+通过观察，我们发现 Athernet 的错误特点是传输过程中会有连续数据的错误，因此对于我们的设计，横向数据（即每个 frame 中的数据）连续错误的概率较大。因此我们设想如果我们能“竖着”对其做里德-所罗门码可以提高对错误发生的针对性。
 
 由于我们的传输效率较高，因此我们还采用了在规定时间内两倍发送数据的方式来增加冗余。当里的所罗门算法发现当前 frame 出现错误后会采用第二次收到的 frame 值。
 
 ### 错误与改进
 
-我们的 frames 必须保证严格对齐，因为我们是根据收到的顺序进行还原。未来的改进可以设计一个协议，在传输的 frame 中加入对应的 index 
+我们的 frames 必须保证严格对齐，因为我们是根据收到的顺序进行还原。未来的改进可以设计一个协议，在传输的 frame 中加入对应的 index.
 
 ### 参考与实用链接
 
@@ -248,7 +248,10 @@ if (icmpPacket is {TypeCode: IcmpV4TypeCode.EchoRequest or IcmpV4TypeCode.EchoRe
 
 ### 其它实现思路
 #### TCP 传输
+![](https://i.imgur.com/yEsH1td.png)
 
+通过改写路由表，`route add 10.11.135.168 mask 255.255.255.255 10.11.135.1`，使 loop back 的包经过网卡，得以被 `pcap` 捕获。
 
+在实现过程中，抓包 TCP 中出现多个包，并且无法使用 Socket 发送，因此该方案被搁置。
 #### 网卡驱动
 微软在 Windows10 之后提供了一种简化的网络驱动编程方式在 [netcx](https://docs.microsoft.com/en-us/windows-hardware/drivers/netcx/) 和 [NetAdapter-Cx-Driver-Samples](https://github.com/microsoft/NetAdapter-Cx-Driver-Samples), 可以实现基于 AtherNet 的网卡驱动。
